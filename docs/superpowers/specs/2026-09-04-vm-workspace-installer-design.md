@@ -38,6 +38,7 @@ config/
   versions.env               tool version pins (see §8)
   repos.txt                  repos to clone
   npm-globals.txt            global npm packages
+  claude-plugins.txt         Claude Code marketplaces + plugins
   apt-packages.txt           Ubuntu apt prerequisites
   dev-hosts.txt              /etc/hosts entries for local dev
   secrets.env.example        documented secret names, no values
@@ -54,6 +55,7 @@ steps/
   42-python.sh
   43-terraform.sh
   44-rust.sh
+  45-claude-code.sh
   50-docker.sh
   51-postgres.sh
   60-github-auth.sh
@@ -170,6 +172,7 @@ script (e.g. `sdkman-init.sh`, `nvm.sh`, `brew shellenv`) inside `step_run`.
 | 42 | python | all | no | `pyenv install -s $PYTHON_VERSION`, `pyenv global $PYTHON_VERSION`. awscli-local / terraform-local / localstack come from brew, not pip. | `pyenv versions` lists it |
 | 43 | terraform | all | no | `tfenv install $TERRAFORM_VERSION`, `tfenv use`. | `terraform version` matches |
 | 44 | rust | all | no | `rustup-init -y --no-modify-path`, `rustup target add $RUST_TARGET`. macOS additionally taps `filosottile/musl-cross` and installs `musl-cross` for the Lambda scraper. | target listed in `rustup target list --installed` |
+| 45 | claude-code | all | no | Installs Claude Code with the native installer if `claude` is missing, then for each line in `config/claude-plugins.txt`: `claude plugin marketplace add <repo>` / `claude plugin install <name@marketplace>`. | `claude --version` works and `claude plugin list` shows every plugin |
 | 50 | docker | all | Linux: yes | macOS: `colima start --cpu 4 --memory 8 --vm-type vz` and `brew services start colima` for auto-start; symlinks the socket to `/var/run/docker.sock` is NOT done (Testcontainers reads `DOCKER_HOST`, which the managed block exports). If virtualization is unavailable, prints the nested-virt explanation and returns 0 with a warning. Linux: adds Docker's apt repo, installs `docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin`, adds the user to the `docker` group, enables the service. | `docker info` succeeds |
 | 51 | postgres | all | no | Ensures `postgresql@15` and `libpq` are installed (via brew-bundle) and `psql` is on PATH. Does NOT start the service: the project's Docker Compose runs its own Postgres on 5432 and a host service would collide. Prints the `brew services start postgresql@15` hint. | `psql --version` works |
 | 60 | github-auth | all | no | `gh auth login` (interactive; skipped under `--yes` if not already logged in), generates an ed25519 SSH key if none exists, `gh ssh-key add`. Prompts for each secret in `secrets.env.example` (or reads it from the environment), writes `~/.config/skoolscout/secrets.env` (mode 600). Writes `~/.m2/settings.xml` with `<server><id>github</id>` using `${env.GITHUB_TOKEN}` so the token lives in one place. | gh logged in, key uploaded, secrets file complete, settings.xml present |
@@ -191,6 +194,7 @@ brew "gh"
 brew "jq"
 brew "direnv"
 brew "tmux"
+brew "neovim"
 brew "herdr"
 brew "mkcert"
 brew "awscli"
@@ -203,6 +207,7 @@ brew "postgresql@15"
 brew "nvm"
 brew "pnpm"
 brew "pyenv"
+brew "xz"
 brew "rustup"
 brew "libxml2"
 brew "zip"
@@ -222,6 +227,7 @@ cask "ghostty"
 cask "visual-studio-code"
 cask "google-chrome"
 cask "postman"
+cask "figma"
 ```
 
 ### Brewfile.linux
@@ -235,7 +241,16 @@ scope on Linux.
 task-master-ai
 dotenv-cli
 npm-check-updates
-@anthropic-ai/claude-code
+```
+
+Claude Code is NOT an npm global: it is installed by its native installer
+(`curl -fsSL https://claude.ai/install.sh | bash`, lands in `~/.local/bin`)
+in step 45, which also installs plugins from `config/claude-plugins.txt`:
+
+```
+marketplace obra/superpowers-marketplace
+plugin superpowers@superpowers-marketplace
+plugin mattpocock-skills@claude-plugins-official
 ```
 
 `@skoolscout/gen-dotenv` is deliberately not global: it is a devDependency of
