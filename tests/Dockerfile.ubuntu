@@ -1,0 +1,11 @@
+# Ubuntu 24.04 with a passwordless-sudo user, the installer copied in. Used by tests/smoke-linux.sh.
+FROM ubuntu:24.04
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y sudo curl ca-certificates git \
+ && rm -rf /var/lib/apt/lists/* \
+ && useradd -m -s /bin/bash dev \
+ && echo 'dev ALL=(ALL) NOPASSWD:ALL' > /etc/sudoers.d/dev
+USER dev
+ENV HOME=/home/dev
+WORKDIR /home/dev/installer
+COPY --chown=dev:dev . .
