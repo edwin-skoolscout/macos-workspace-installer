@@ -9,9 +9,9 @@ run and test `skoolscout-com`, `skoolscout-com-tenants` and `jefelabs-com`.
 curl -fsSL https://raw.githubusercontent.com/edwin-skoolscout/macos-workspace-installer/main/bootstrap.sh | bash
 ```
 
-The repo is private, so on a brand-new VM the raw URL needs a token; either make the repo
-public, or run `gh auth login` first and clone it, or run it from a local checkout
-(shared folder / USB stick). `INSTALLER_REPO=<url>` overrides the clone source.
+The repo is public, so that works on a brand-new VM with nothing but curl. You can also run
+it from a local checkout (shared folder / USB stick) with `./bootstrap.sh`;
+`INSTALLER_REPO=<url>` and `INSTALLER_REF=<branch>` override the clone source.
 
 ```bash
 ./bootstrap.sh
