@@ -1,0 +1,5 @@
+# marketplace <owner/repo>        → claude plugin marketplace add
+# plugin <name>@<marketplace>     → claude plugin install
+marketplace obra/superpowers-marketplace
+plugin superpowers@superpowers-marketplace
+plugin mattpocock-skills@claude-plugins-official

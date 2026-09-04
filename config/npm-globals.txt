@@ -1,0 +1,4 @@
+# one package per line; installed with npm i -g under the pinned Node
+task-master-ai
+dotenv-cli
+npm-check-updates

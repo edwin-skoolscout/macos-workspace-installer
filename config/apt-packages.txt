@@ -1,0 +1,22 @@
+# base toolchain + what Homebrew, pyenv builds, mkcert and the musl target need
+build-essential
+procps
+curl
+file
+git
+ca-certificates
+gnupg
+unzip
+zip
+libnss3-tools
+musl-tools
+libssl-dev
+zlib1g-dev
+libbz2-dev
+libreadline-dev
+libsqlite3-dev
+libffi-dev
+liblzma-dev
+libncursesw5-dev
+tk-dev
+xz-utils

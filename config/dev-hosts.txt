@@ -1,0 +1,5 @@
+skoolscout.com.local
+iym.skoolscout.com.local
+demo-org.skoolscout.com.local
+demo-com.skoolscout.com.local
+demo-school.skoolscout.com.local
