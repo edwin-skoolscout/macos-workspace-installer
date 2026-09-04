@@ -14,7 +14,7 @@
 
 - All scripts run under **bash 3.2** (macOS `/bin/bash`): no `mapfile`, no associative arrays, no `${var,,}`, and guard empty-array expansion as `${arr[@]+"${arr[@]}"}`.
 - `shellcheck -x` must report zero findings (`make lint`). Split `local x="$(cmd)"` into two lines (SC2155); use `if/else` rather than `a && b || c` (SC2015).
-- Every step file defines `STEP_DESC`, `STEP_OS` (`all|macos|linux`), `STEP_SUDO` (`yes|no|linux`), `step_check()` and `step_run()`, and is safe to run twice.
+- Every step file defines `STEP_DESC`, `STEP_OS` (`all|macos|linux`), `STEP_SUDO` (`yes|no|linux`), `step_check()` and `step_run()`, and is safe to run twice. Its second line is `# shellcheck disable=SC2034  # STEP_* are read by install.sh after sourcing` (the orchestrator reads those variables, so shellcheck would otherwise flag them unused).
 - Mutating commands go through `wi_run` (honours `--dry-run`); non-command mutations (file writes) are guarded with `if wi_dry "message"; then return 0; fi`. (The spec calls this helper `run`; it is named `wi_run` here because bats defines its own `run`.)
 - Version pins, copied verbatim from the spec: `JAVA_VERSIONS="25.0.3-amzn 21.0.9-amzn"`, `GRADLE_VERSION="9.6.1"`, `NODE_VERSION="24.18.0"`, `PYTHON_VERSION="3.10.11"`, `TERRAFORM_VERSION="1.15.8"`, `RUST_TARGET="x86_64-unknown-linux-musl"`, `WORKSPACE_DIR="$HOME/Development/Workspaces/skoolscout"`.
 - No secret values anywhere in the repo. Secrets file: `~/.config/skoolscout/secrets.env`, mode 600.
