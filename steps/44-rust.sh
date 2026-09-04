@@ -32,6 +32,7 @@ step_run() {
   wi_run "$r" target add "$RUST_TARGET"
   if [[ "$WI_OS" == macos ]] && ! command_exists x86_64-linux-musl-gcc; then
     log_warn "Installing musl-cross (compiles a cross toolchain; this can take a long time)"
+    brew_trust_tap filosottile/musl-cross
     wi_run brew install filosottile/musl-cross/musl-cross
   fi
 }

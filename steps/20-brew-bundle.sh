@@ -7,6 +7,9 @@ STEP_SUDO="no"
 
 brew_bundle_files() { printf '%s\n' "$WI_ROOT/Brewfile.common" "$WI_ROOT/Brewfile.$WI_OS"; }
 
+# brewfile_taps FILE → the tap names declared in FILE (tap "owner/repo")
+brewfile_taps() { sed -nE 's/^tap "([^"]+)".*/\1/p' "$1"; }
+
 step_check() {
   load_brew || return 1
   local f
@@ -22,6 +25,8 @@ step_run() {
   while IFS= read -r f; do
     [[ -f "$f" ]] || continue
     if ! grep -qE '^(tap|brew|cask) ' "$f"; then log_info "$(basename "$f") lists nothing, skipping"; continue; fi
+    local tap
+    while IFS= read -r tap; do brew_trust_tap "$tap"; done < <(brewfile_taps "$f")
     HOMEBREW_NO_AUTO_UPDATE=1 wi_run brew bundle install --no-upgrade --file="$f"
   done < <(brew_bundle_files)
 }

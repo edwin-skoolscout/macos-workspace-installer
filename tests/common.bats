@@ -64,3 +64,19 @@ setup() {
   load_secrets
   [ "$GITHUB_TOKEN" = abc ]
 }
+
+@test "brew_trust_tap taps then trusts when brew supports trust" {
+  calls="$BATS_TEST_TMPDIR/calls"
+  brew() { echo "brew $*" >> "$calls"; [[ "$1" == trust && "$2" == --help ]] && return 0; return 0; }
+  brew_trust_tap stripe/stripe-cli
+  grep -qx 'brew tap stripe/stripe-cli' "$calls"
+  grep -qx 'brew trust stripe/stripe-cli' "$calls"
+}
+
+@test "brew_trust_tap only taps when brew has no trust command" {
+  calls="$BATS_TEST_TMPDIR/calls"
+  brew() { echo "brew $*" >> "$calls"; [[ "$1" == trust && "$2" == --help ]] && return 1; return 0; }
+  brew_trust_tap stripe/stripe-cli
+  grep -qx 'brew tap stripe/stripe-cli' "$calls"
+  ! grep -q 'brew trust stripe/stripe-cli' "$calls"
+}

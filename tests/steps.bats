@@ -38,3 +38,12 @@ setup() {
     [[ "$output" == *"$name"* ]]
   done
 }
+
+@test "brew-bundle extracts tap names from a Brewfile" {
+  # shellcheck source=/dev/null
+  source "$WI_ROOT/lib/common.sh"
+  # shellcheck source=/dev/null
+  source "$WI_ROOT/steps/20-brew-bundle.sh"
+  run brewfile_taps "$WI_ROOT/Brewfile.common"
+  [ "$output" = "stripe/stripe-cli" ]
+}

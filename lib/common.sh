@@ -71,6 +71,14 @@ load_brew() {
   return 1
 }
 
+# brew_trust_tap TAP — tap it, then mark it trusted. Newer Homebrew refuses to load
+# formulae from untrusted third-party taps ("Run `brew trust <tap>`"); older brews
+# have no `trust` subcommand, so it is only called when supported.
+brew_trust_tap() {
+  wi_run brew tap "$1"
+  if brew trust --help >/dev/null 2>&1; then wi_run brew trust "$1"; fi
+}
+
 # wi_run CMD ARGS... — run a mutating command, or print it under --dry-run
 wi_run() {
   if [[ "$WI_DRY_RUN" == 1 ]]; then
