@@ -29,9 +29,15 @@ step_run() {
     fi
   fi
   local kind value
+  # Marketplaces first, then refresh them all: a fresh install ships a stale copy of the
+  # official marketplace and `plugin install` fails with "not found" until it is updated.
+  while read -r kind value; do
+    [[ "$kind" == marketplace ]] && wi_run claude plugin marketplace add "$value"
+  done < <(claude_plugin_lines)
+  wi_run claude plugin marketplace update
   while read -r kind value; do
     case "$kind" in
-      marketplace) wi_run claude plugin marketplace add "$value" ;;
+      marketplace) ;;
       plugin)
         if claude_plugin_installed "$value"; then log_ok "plugin $value present"; else wi_run claude plugin install "$value"; fi ;;
       *) log_warn "unknown line in claude-plugins.txt: $kind $value" ;;
