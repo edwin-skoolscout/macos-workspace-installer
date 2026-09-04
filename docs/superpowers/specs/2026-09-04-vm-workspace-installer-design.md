@@ -6,7 +6,7 @@ Status: approved (design), pending spec review
 ## 1. Purpose
 
 A re-runnable installer that turns a fresh VM into a machine that can build,
-run and test `skoolscout-com` (and `skoolscout-com-tenants`). It installs
+run and test `skoolscout-com`, `skoolscout-com-tenants` and `jefelabs-com`. It installs
 Homebrew first, then every tool the project needs, then wires up local dev
 (shell config, GitHub auth, repo clones, `/etc/hosts`, mkcert).
 
@@ -144,7 +144,7 @@ Each `steps/NN-name.sh` is sourced by the orchestrator and defines:
 ```bash
 STEP_DESC="one line shown in --list and logs"
 STEP_OS="all|macos|linux"
-STEP_SUDO="yes|no"
+STEP_SUDO="yes|no|linux"   # linux = sudo only on Ubuntu
 
 step_check() { ... }   # return 0 if already satisfied → step is skipped
 step_run()   { ... }   # do the work; runs under set -euo pipefail
@@ -175,7 +175,7 @@ script (e.g. `sdkman-init.sh`, `nvm.sh`, `brew shellenv`) inside `step_run`.
 | 60 | github-auth | all | no | `gh auth login` (interactive; skipped under `--yes` if not already logged in), generates an ed25519 SSH key if none exists, `gh ssh-key add`. Prompts for each secret in `secrets.env.example` (or reads it from the environment), writes `~/.config/skoolscout/secrets.env` (mode 600). Writes `~/.m2/settings.xml` with `<server><id>github</id>` using `${env.GITHUB_TOKEN}` so the token lives in one place. | gh logged in, key uploaded, secrets file complete, settings.xml present |
 | 70 | clone-repos | all | no | For each line `url branch` in `config/repos.txt`: clone with `--recurse-submodules` into `$WORKSPACE_DIR` if absent, else `git fetch` and `git submodule update --init --recursive`. | every repo present with submodules initialised |
 | 80 | local-dev-wiring | all | yes | Appends any missing `127.0.0.1 <host>` lines from `config/dev-hosts.txt` to `/etc/hosts`. Runs `mkcert -install`. | all hosts present, CA installed |
-| 90 | project-deps | all | Linux: yes (Playwright deps) | In `skoolscout-com`: `direnv allow`, `npm i --no-workspaces`, `cd app-ui && npm i`, `cd app-test-e2e-runner && npm i && npx playwright install --with-deps chromium`. In `skoolscout-com-tenants`: `npm i`. Sources the secrets file first so private registries authenticate. Skipped with a warning if secrets are missing. | `node_modules` present in each package and Playwright's chromium cached |
+| 90 | project-deps | all | Linux: yes (Playwright deps) | In `skoolscout-com`: `direnv allow`, `npm i --no-workspaces`, `cd app-ui && npm i`, `cd app-test-e2e-runner && npm i && npx playwright install --with-deps chromium`. In `skoolscout-com-tenants`: `npm i`. In `jefelabs-com`: `pnpm install` (its `packageManager` pins pnpm 11). Sources the secrets file first so private registries authenticate. Skipped with a warning if secrets are missing. | `node_modules` present in each package and Playwright's chromium cached |
 
 Default step set = all steps. `bootstrap.sh` passes flags through, so
 `curl ... | bash -s -- --skip rust,postgres` works.
@@ -201,6 +201,7 @@ brew "tfenv"
 brew "libpq"
 brew "postgresql@15"
 brew "nvm"
+brew "pnpm"
 brew "pyenv"
 brew "rustup"
 brew "libxml2"
@@ -266,7 +267,15 @@ WORKSPACE_DIR="$HOME/Development/Workspaces/skoolscout"
 ```
 git@github.com:skoolscout/skoolscout-com.git develop
 git@github.com:skoolscout/skoolscout-com-tenants.git develop
+git@github.com:skoolscout/jefelabs-com.git develop
+git@github.com:skoolscout/jefelabs-scripts.git develop
+git@github.com:skoolscout/jefelabs-docs.git develop
 ```
+
+`jefelabs-com` is the source of the Maven packages `app-service` pulls from
+GitHub Packages. `jefelabs-scripts` and `jefelabs-docs` are also the `.scripts`
+and `.docs` submodules of the app repos; cloning them standalone gives a place
+to edit and push them directly.
 
 `config/dev-hosts.txt` (copied from the `DEV_HOSTS` list in the project
 Makefile):
@@ -362,7 +371,7 @@ so OS/shell differences are substitutions, not separate copies.
 | dnsmasq + `/etc/resolver` | Only in README; no script uses it. `make hosts` + mkcert cover local hostnames. |
 | Docker Desktop | User chose Colima. |
 | IntelliJ IDEA | Not requested. |
-| pnpm / yarn / bun | Mentioned in a README; every lockfile and script uses npm. |
+| yarn / bun | Mentioned in a README; skoolscout-com uses npm and jefelabs-com uses pnpm. |
 | k6, ngrok, uv, git-lfs, yq, Flyway CLI | Zero or commented-out references. |
 | Qodana CLI | JetBrains installer, CI uses the Action. Documented as manual in README. |
 | `mtauth-install` | Private tool with no known distribution channel. Installer prints a reminder at the end. |
