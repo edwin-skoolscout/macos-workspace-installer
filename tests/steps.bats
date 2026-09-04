@@ -44,6 +44,8 @@ setup() {
   source "$WI_ROOT/lib/common.sh"
   # shellcheck source=/dev/null
   source "$WI_ROOT/steps/20-brew-bundle.sh"
-  run brewfile_taps "$WI_ROOT/Brewfile.common"
+  run brewfile_taps "$WI_ROOT/Brewfile.macos"
   [ "$output" = "stripe/stripe-cli" ]
+  run brewfile_taps "$WI_ROOT/Brewfile.common"
+  [ -z "$output" ]
 }

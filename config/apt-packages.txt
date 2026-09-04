@@ -5,6 +5,7 @@ curl
 file
 git
 ca-certificates
+locales
 gnupg
 unzip
 zip

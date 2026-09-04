@@ -76,11 +76,11 @@ check_version() {
 
 log_header "Tools"
 for t in brew git gh jq direnv tmux nvim herdr mkcert aws awslocal tflocal localstack tfenv psql \
-         node npm pnpm python3 pyenv java gradle terraform cargo rustup docker stripe xmllint zip unzip \
+         node npm pnpm python3 pyenv java gradle terraform cargo rustup docker xmllint zip unzip \
          task-master dotenv ncu claude; do
   check_cmd "$t"
 done
-if [[ "$WI_OS" == macos ]]; then check_cmd colima; fi
+if [[ "$WI_OS" == macos ]]; then check_cmd colima; check_cmd stripe; fi
 
 log_header "Versions"
 for v in $JAVA_VERSIONS; do

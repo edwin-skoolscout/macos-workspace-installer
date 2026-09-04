@@ -63,6 +63,11 @@ if [[ "$os" == linux ]]; then
   # shellcheck disable=SC2046
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
     $(grep -vE '^[[:space:]]*(#|$)' "$INSTALLER_DIR/config/apt-packages.txt" | tr '\n' ' ')
+  # postgresql@15's initdb wants en_US.UTF-8; minimal images ship without any generated locale.
+  if ! locale -a 2>/dev/null | grep -qiE '^en_US\.utf-?8$'; then
+    say "Generating en_US.UTF-8 locale"
+    sudo locale-gen en_US.UTF-8
+  fi
 fi
 
 # 4. Homebrew.

@@ -30,7 +30,7 @@ open a new terminal and run `./doctor.sh` from the installer directory
 | Languages | Java 25.0.3 + 21.0.9 (Corretto, sdkman), Gradle 9.6.1, Node 24.18.0 (nvm), Python 3.10.11 (pyenv), Terraform 1.15.8 (tfenv), Rust stable + musl target |
 | Containers | Colima + docker CLI (macOS), Docker Engine (Ubuntu) |
 | Data | PostgreSQL 15 + `psql` (installed, not started: compose owns 5432) |
-| CLI | git, gh, jq, direnv, tmux, neovim, herdr, mkcert, awscli, awslocal, tflocal, localstack, stripe, libxml2, zip |
+| CLI | git, gh, jq, direnv, tmux, neovim, herdr, mkcert, awscli, awslocal, tflocal, localstack, libxml2, zip; Stripe CLI on macOS only (its brew tap does not build on Linux) |
 | npm globals | task-master-ai, dotenv-cli, npm-check-updates |
 | Claude Code | native install + plugins from `config/claude-plugins.txt` (superpowers, mattpocock-skills) |
 | GUI (macOS) | Ghostty, VS Code, Google Chrome, Postman, Figma |

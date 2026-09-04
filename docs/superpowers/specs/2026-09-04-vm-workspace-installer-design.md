@@ -213,16 +213,17 @@ brew "libxml2"
 brew "zip"
 brew "unzip"
 brew "coreutils"
-brew "stripe/stripe-cli/stripe"
 ```
 
 ### Brewfile.macos
 
 ```
+tap "stripe/stripe-cli"
 brew "colima"
 brew "docker"
 brew "docker-compose"
 brew "docker-buildx"
+brew "stripe/stripe-cli/stripe"   # tap formula fails an unsatisfied requirement on Linux
 cask "ghostty"
 cask "visual-studio-code"
 cask "google-chrome"
@@ -248,6 +249,7 @@ Claude Code is NOT an npm global: it is installed by its native installer
 in step 45, which also installs plugins from `config/claude-plugins.txt`:
 
 ```
+marketplace anthropics/claude-plugins-official
 marketplace obra/superpowers-marketplace
 plugin superpowers@superpowers-marketplace
 plugin mattpocock-skills@claude-plugins-official
@@ -259,8 +261,9 @@ plugin mattpocock-skills@claude-plugins-official
 ### config/apt-packages.txt (Ubuntu only, installed by bootstrap)
 
 ```
-build-essential procps curl file git ca-certificates gnupg unzip zip
-libnss3-tools musl-tools
+build-essential procps curl file git ca-certificates locales gnupg unzip zip
+libnss3-tools musl-tools (+ pyenv build deps); bootstrap also runs `locale-gen en_US.UTF-8`
+when missing, because postgresql@15's initdb requires it
 ```
 
 ## 8. Configuration
