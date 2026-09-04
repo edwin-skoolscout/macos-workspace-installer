@@ -87,7 +87,7 @@ from a local checkout (shared folder, USB, etc.).
    "$(brew shellenv)"` for the current process.
 4. If `install.sh` exists next to `bootstrap.sh`, use that checkout. Otherwise
    `git clone` `$INSTALLER_REPO` (default
-   `https://github.com/ecruz165/macos-workspace-installer.git`, ref
+   `https://github.com/edwin-skoolscout/macos-workspace-installer.git`, ref
    `$INSTALLER_REF`, default `main`) into
    `~/Development/Workspaces/ecruz165/macos-workspace-installer`.
 5. `exec ./install.sh "$@"`, forwarding any flags.

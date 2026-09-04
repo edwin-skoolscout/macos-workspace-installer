@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # bootstrap.sh — the only file a fresh VM needs.
 #
-#   curl -fsSL https://raw.githubusercontent.com/ecruz165/macos-workspace-installer/main/bootstrap.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/edwin-skoolscout/macos-workspace-installer/main/bootstrap.sh | bash
 #   curl -fsSL .../bootstrap.sh | bash -s -- --skip rust,postgres     # forward install.sh flags
 #   ./bootstrap.sh                                                     # from a local checkout
 #
@@ -10,7 +10,7 @@
 # Env: INSTALLER_REPO, INSTALLER_REF, INSTALLER_DIR; BOOTSTRAP_SKIP_BREW=1 (tests only).
 set -euo pipefail
 
-INSTALLER_REPO="${INSTALLER_REPO:-https://github.com/ecruz165/macos-workspace-installer.git}"
+INSTALLER_REPO="${INSTALLER_REPO:-https://github.com/edwin-skoolscout/macos-workspace-installer.git}"
 INSTALLER_REF="${INSTALLER_REF:-main}"
 INSTALLER_DIR="${INSTALLER_DIR:-$HOME/Development/Workspaces/ecruz165/macos-workspace-installer}"
 
