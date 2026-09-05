@@ -222,6 +222,7 @@ brew "coreutils"
 ```
 tap "stripe/stripe-cli"
 brew "stripe/stripe-cli/stripe"   # tap formula fails an unsatisfied requirement on Linux
+cask "antigravity-cli"          # agy; cask only, Linux uses the native installer script
 cask "ghostty"
 cask "visual-studio-code"
 cask "google-chrome"
@@ -237,7 +238,6 @@ installed on either OS (§13).
 ### config/npm-globals.txt
 
 ```
-task-master-ai
 dotenv-cli
 npm-check-updates
 ```

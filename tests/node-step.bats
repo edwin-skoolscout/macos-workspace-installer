@@ -11,7 +11,6 @@ setup() {
 }
 
 @test "npm_global_bin maps package names to their binaries" {
-  [ "$(npm_global_bin task-master-ai)" = task-master ]
   [ "$(npm_global_bin dotenv-cli)" = dotenv ]
   [ "$(npm_global_bin npm-check-updates)" = ncu ]
   [ "$(npm_global_bin some-other-tool)" = some-other-tool ]
@@ -19,6 +18,7 @@ setup() {
 
 @test "npm_globals lists the configured packages without comments" {
   run npm_globals
-  [[ "$output" == *task-master-ai* ]]
+  [[ "$output" == *dotenv-cli* ]]
+  [[ "$output" != *task-master-ai* ]]
   [[ "$output" != *"#"* ]]
 }

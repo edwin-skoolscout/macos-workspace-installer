@@ -25,7 +25,6 @@ npm_globals() { grep -vE '^[[:space:]]*(#|$)' "$WI_ROOT/config/npm-globals.txt";
 # npm_global_bin PKG → the executable the package installs
 npm_global_bin() {
   case "$1" in
-    task-master-ai)     echo task-master ;;
     dotenv-cli)         echo dotenv ;;
     npm-check-updates)  echo ncu ;;
     *)                  basename "$1" ;;

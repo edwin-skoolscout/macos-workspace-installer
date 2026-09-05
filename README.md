@@ -35,8 +35,8 @@ what is missing and moves on. You can also copy `config/repos.txt.example` to
 | Package manager | Homebrew (macOS) / Linuxbrew (Ubuntu) + `Brewfile.common`, `Brewfile.<os>` |
 | Languages | Java 25.0.3 + 21.0.9 (Corretto, sdkman), Gradle 9.6.1, Node 24.18.0 (nvm), Python 3.10.11 (pyenv), Terraform 1.15.8 (tfenv), Rust stable + musl target |
 | Data | PostgreSQL 15 + `psql` (installed, not started: the app runs Postgres in-process) |
-| CLI | git, gh, jq, direnv, tmux, neovim, herdr, mkcert, awscli, awslocal, tflocal, localstack, libxml2, zip; Stripe CLI on macOS only (its brew tap does not build on Linux) |
-| npm globals | task-master-ai, dotenv-cli, npm-check-updates |
+| CLI | git, gh, jq, direnv, tmux, neovim, herdr, mkcert, awscli, awslocal, tflocal, localstack, libxml2, zip; macOS only: Stripe CLI (its brew tap does not build on Linux) and Antigravity CLI `agy` (cask) |
+| npm globals | dotenv-cli, npm-check-updates |
 | Claude Code | native install + plugins from `config/claude-plugins.txt` (superpowers, mattpocock-skills) |
 | GUI (macOS) | Ghostty, VS Code, Google Chrome, Postman, Figma |
 | Setup | shell rc block, `gh auth login`, SSH key, secrets file, `~/.m2/settings.xml`, repo clones with submodules, `/etc/hosts` dev entries, mkcert CA, `npm install` + Playwright chromium |

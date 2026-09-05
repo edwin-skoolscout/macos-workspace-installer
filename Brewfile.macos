@@ -1,8 +1,12 @@
-# macOS only: Stripe CLI and GUI apps
+# macOS only: Stripe CLI, Antigravity CLI and GUI apps
 # (the stripe tap formula has an unsatisfied requirement on Linux; use Stripe's apt repo there)
 tap "stripe/stripe-cli"
 
 brew "stripe/stripe-cli/stripe"
+
+# agy, Google's terminal agent (successor to gemini-cli). Cask only; on Linux use
+# `curl -fsSL https://antigravity.google/cli/install.sh | bash` by hand.
+cask "antigravity-cli"
 
 cask "ghostty"
 cask "visual-studio-code"
