@@ -8,13 +8,18 @@ setup() { load test_helper; }
   [ "$output" = "25.0.3-amzn 21.0.9-amzn|9.6.1|24.18.0|3.10.11|1.15.8|x86_64-unknown-linux-musl|$HOME/Development/Workspaces/skoolscout" ]
 }
 
-@test "repos.txt lines are 'url branch' pairs" {
+@test "repos.txt.example lines are '<git url> <branch>' pairs" {
+  f="$WI_ROOT/config/repos.txt.example"
   while read -r url branch extra; do
-    [[ "$url" == git@github.com:skoolscout/*.git ]]
+    [[ "$url" == git@*:*/*.git || "$url" == https://*/*.git ]]
     [ -n "$branch" ]
     [ -z "$extra" ]
-  done < <(grep -vE '^[[:space:]]*(#|$)' "$WI_ROOT/config/repos.txt")
-  [ "$(grep -cvE '^[[:space:]]*(#|$)' "$WI_ROOT/config/repos.txt")" -eq 5 ]
+  done < <(grep -vE '^[[:space:]]*(#|$)' "$f")
+  [ "$(grep -cvE '^[[:space:]]*(#|$)' "$f")" -ge 1 ]
+}
+
+@test "repos.txt itself is git-ignored" {
+  git -C "$WI_ROOT" check-ignore -q config/repos.txt
 }
 
 @test "claude-plugins.txt lines are 'marketplace REPO' or 'plugin NAME@MARKET'" {

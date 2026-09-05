@@ -18,9 +18,9 @@ declarative and idempotent that lives in its own repo.
 
 | Target | Notes |
 |---|---|
-| macOS 14+ on Apple Silicon (primary) | Parallels / Tart VMs. Docker via Colima needs nested virtualization, which Apple supports only on M3+ hosts running macOS 15+. The installer detects this and warns rather than fails. |
+| macOS 14+ on Apple Silicon (primary) | Parallels / Tart VMs. Nothing installed needs a container runtime (§13). On an M1/M2 host a macOS guest could not run one anyway: Colima and Docker Desktop both boot a Linux VM, which needs nested virtualization (M3+ host on macOS 15+). |
 | macOS on Intel | Same path; no special handling. |
-| Ubuntu 22.04 / 24.04 (x86_64, arm64) | Homebrew on Linux for CLI tools; Docker Engine from Docker's apt repo; no casks. |
+| Ubuntu 22.04 / 24.04 (x86_64, arm64) | Homebrew on Linux for CLI tools; no casks. |
 
 Shell: zsh on macOS, bash or zsh on Ubuntu. The installer writes to the rc file
 of the user's login shell (`$SHELL`).
@@ -36,7 +36,7 @@ Brewfile.macos               macOS-only formulae + casks
 Brewfile.linux               Linux-only formulae (may be empty)
 config/
   versions.env               tool version pins (see §8)
-  repos.txt                  repos to clone
+  repos.txt.example          repo list template; copied to the git-ignored repos.txt
   npm-globals.txt            global npm packages
   claude-plugins.txt         Claude Code marketplaces + plugins
   apt-packages.txt           Ubuntu apt prerequisites
@@ -56,7 +56,6 @@ steps/
   43-terraform.sh
   44-rust.sh
   45-claude-code.sh
-  50-docker.sh
   51-postgres.sh
   60-github-auth.sh
   70-clone-repos.sh
@@ -105,7 +104,7 @@ install.sh [--only STEP[,STEP...]] [--skip STEP[,STEP...]] [--list]
 
 - Sources `lib/*.sh` and `config/versions.env`.
 - Discovers `steps/*.sh` in lexical order. A step is addressed by its file
-  name without number and extension (`sdkman`, `docker`, ...).
+  name without number and extension (`sdkman`, `postgres`, ...).
 - `--list` prints the steps with their OS applicability and exits.
 - `--only` runs just those steps; `--skip` removes steps from the default set.
 - `--dry-run` prints every command that would change the system without
@@ -128,12 +127,11 @@ Prints a table of checks and exits 0 only if nothing FAILed. Checks:
 - Versions match `config/versions.env` for Java, Gradle, Node, Python,
   Terraform. The verdict policy (exact match, same major, newer allowed) is
   implemented in `doctor_verdict()` — see §15.
-- `docker info` succeeds (socket reachable, daemon running).
 - `psql --version` works.
 - `brew doctor` has no errors (warnings are reported, not failed).
 - `gh auth status` succeeds; `ssh -T git@github.com` authenticates.
 - Each repo in `config/repos.txt` exists in the workspace with submodules
-  initialised.
+  initialised (no repos file at all is a warning).
 - Secrets file exists and each name in `secrets.env.example` is non-empty
   (values are never printed).
 - Every host in `config/dev-hosts.txt` resolves to 127.0.0.1.
@@ -173,10 +171,9 @@ script (e.g. `sdkman-init.sh`, `nvm.sh`, `brew shellenv`) inside `step_run`.
 | 43 | terraform | all | no | `tfenv install $TERRAFORM_VERSION`, `tfenv use`. | `terraform version` matches |
 | 44 | rust | all | no | `rustup-init -y --no-modify-path`, `rustup target add $RUST_TARGET`. macOS additionally taps and trusts `filosottile/musl-cross` and installs `musl-cross` for the Lambda scraper. | target listed in `rustup target list --installed` |
 | 45 | claude-code | all | no | Installs Claude Code with the native installer if `claude` is missing, then adds every `marketplace` line from `config/claude-plugins.txt`, runs `claude plugin marketplace update` (a fresh install ships a stale official marketplace), then `claude plugin install <name@marketplace>` for each `plugin` line. | `claude --version` works and `claude plugin list` shows every plugin |
-| 50 | docker | all | Linux: yes | macOS: `colima start --cpu 4 --memory 8 --vm-type vz` and `brew services start colima` for auto-start; symlinks the socket to `/var/run/docker.sock` is NOT done (Testcontainers reads `DOCKER_HOST`, which the managed block exports). If virtualization is unavailable, prints the nested-virt explanation and returns 0 with a warning. Linux: adds Docker's apt repo, installs `docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin`, adds the user to the `docker` group, enables the service. | `docker info` succeeds |
-| 51 | postgres | all | no | Ensures `postgresql@15` and `libpq` are installed (via brew-bundle) and `psql` is on PATH. Does NOT start the service: the project's Docker Compose runs its own Postgres on 5432 and a host service would collide. Prints the `brew services start postgresql@15` hint. | `psql --version` works |
+| 51 | postgres | all | no | Ensures `postgresql@15` and `libpq` are installed (via brew-bundle) and `psql` is on PATH. Does NOT start the service: the app runs Postgres in-process in these VMs, so a host instance is opt-in. Prints the `brew services start postgresql@15` hint. | `psql --version` works |
 | 60 | github-auth | all | no | `gh auth login` (interactive; skipped under `--yes` if not already logged in), generates an ed25519 SSH key if none exists, `gh ssh-key add`. Prompts for each secret in `secrets.env.example` (or reads it from the environment), writes `~/.config/skoolscout/secrets.env` (mode 600). Writes `~/.m2/settings.xml` with `<server><id>github</id>` using `${env.GITHUB_TOKEN}` so the token lives in one place. | gh logged in, key uploaded, secrets file complete, settings.xml present |
-| 70 | clone-repos | all | no | For each line `url branch` in `config/repos.txt`: clone with `--recurse-submodules` into `$WORKSPACE_DIR` if absent, else `git fetch` and `git submodule update --init --recursive`. | every repo present with submodules initialised |
+| 70 | clone-repos | all | no | For each line `url branch` in `config/repos.txt` (git-ignored; `WI_REPOS_FILE` overrides the path): clone with `--recurse-submodules` into `$WORKSPACE_DIR` if absent, else `git fetch` and `git submodule update --init --recursive`. If the file is missing, an interactive run prompts for URL + branch pairs and writes it; under `--yes` it prints the copy-the-example hint and returns 0. | every repo present with submodules initialised |
 | 80 | local-dev-wiring | all | yes | Appends any missing `127.0.0.1 <host>` lines from `config/dev-hosts.txt` to `/etc/hosts`. Runs `mkcert -install`. | all hosts present, CA installed |
 | 90 | project-deps | all | Linux: yes (Playwright deps) | In `skoolscout-com`: `direnv allow`, `npm i --no-workspaces`, `cd app-ui && npm i`, `cd app-test-e2e-runner && npm i && npx playwright install --with-deps chromium`. In `skoolscout-com-tenants`: `npm i`. In `jefelabs-com`: `pnpm install` (its `packageManager` pins pnpm 11). Sources the secrets file first so private registries authenticate. Skipped with a warning if secrets are missing. | `node_modules` present in each package and Playwright's chromium cached |
 
@@ -219,10 +216,6 @@ brew "coreutils"
 
 ```
 tap "stripe/stripe-cli"
-brew "colima"
-brew "docker"
-brew "docker-compose"
-brew "docker-buildx"
 brew "stripe/stripe-cli/stripe"   # tap formula fails an unsatisfied requirement on Linux
 cask "ghostty"
 cask "visual-studio-code"
@@ -233,8 +226,8 @@ cask "figma"
 
 ### Brewfile.linux
 
-Empty placeholder. Docker comes from apt (§6 step 50); GUI apps are out of
-scope on Linux.
+Empty placeholder. GUI apps are out of scope on Linux, and no Docker is
+installed on either OS (§13).
 
 ### config/npm-globals.txt
 
@@ -280,7 +273,9 @@ RUST_TARGET="x86_64-unknown-linux-musl"    # app-functions/schoolScraper
 WORKSPACE_DIR="$HOME/Development/Workspaces/skoolscout"
 ```
 
-`config/repos.txt`:
+`config/repos.txt.example` (the real list lives in the git-ignored
+`config/repos.txt`, so each machine or fork keeps its own; the clone-repos step
+asks for the repos interactively when the file is absent):
 
 ```
 git@github.com:skoolscout/skoolscout-com.git develop
@@ -318,7 +313,7 @@ LOCALSTACK_AUTH_TOKEN=   # LocalStack Pro
 
 - Never stored in this repo. `secrets.env.example` holds names only.
 - Written once to `~/.config/skoolscout/secrets.env`, mode 600, and exported by
-  the managed shell block so `npm`, `docker compose` and `mvnw` pick them up
+  the managed shell block so `npm` and `mvnw` pick them up
   from the environment. The project's own `.npmrc` already references
   `${GITHUB_TOKEN}` and `${FONTAWESOME_PACKAGE_TOKEN}`.
 - `~/.m2/settings.xml` references `${env.GITHUB_TOKEN}` rather than embedding
@@ -345,9 +340,6 @@ command -v pyenv >/dev/null && eval "$(pyenv init -)"
 eval "$(direnv hook zsh)"                         # or bash
 export PATH="$HOME/.cargo/bin:$(brew --prefix libpq)/bin:$PATH"
 [ -f "$HOME/.config/skoolscout/secrets.env" ] && set -a && source "$HOME/.config/skoolscout/secrets.env" && set +a
-# macOS only:
-export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
-export TESTCONTAINERS_DOCKER_SOCKET_OVERRIDE=/var/run/docker.sock
 # <<< workspace-installer <<<
 ```
 
@@ -375,25 +367,23 @@ so OS/shell differences are substitutions, not separate copies.
 |---|---|---|
 | Prerequisites | Xcode CLT | apt packages (§7) |
 | Homebrew prefix | `/opt/homebrew` (`/usr/local` on Intel) | `/home/linuxbrew/.linuxbrew` |
-| Docker | Colima + brew docker CLI | Docker Engine from Docker apt repo |
 | GUI apps | casks | none |
 | mkcert trust | system keychain | `libnss3-tools` for Chrome/Firefox |
 | `/etc/resolver` | n/a (dnsmasq excluded) | n/a |
 | Login shell rc | `~/.zprofile` | `~/.bashrc` (or `~/.zshrc` if zsh) |
-| Nested virt warning | checked | not needed |
 
 ## 13. Explicitly excluded, and why
 
 | Item | Reason |
 |---|---|
 | dnsmasq + `/etc/resolver` | Only in README; no script uses it. `make hosts` + mkcert cover local hostnames. |
-| Docker Desktop | User chose Colima. |
+| Docker (Colima, Docker Desktop, Docker Engine) | Removed 2026-09-04. The VMs are isolated dev boxes and the app runs Postgres in-process, so nothing needs a container runtime. A macOS guest on an M1/M2 host could not run one anyway: Colima and Docker Desktop both boot a Linux VM, which needs nested virtualization (M3+ host, macOS 15+). |
 | IntelliJ IDEA | Not requested. |
 | yarn / bun | Mentioned in a README; skoolscout-com uses npm and jefelabs-com uses pnpm. |
 | k6, ngrok, uv, git-lfs, yq, Flyway CLI | Zero or commented-out references. |
 | Qodana CLI | JetBrains installer, CI uses the Action. Documented as manual in README. |
 | `mtauth-install` | Private tool with no known distribution channel. Installer prints a reminder at the end. |
-| Starting Postgres as a service | Would collide with the compose Postgres on 5432. |
+| Starting Postgres as a service | The app runs Postgres in-process; a host instance is opt-in via `brew services start postgresql@15`. |
 | Cloning the standalone e2e runner repo | It lives inside `skoolscout-com/app-test-e2e-runner`. |
 
 ## 14. Testing
@@ -405,9 +395,9 @@ so OS/shell differences are substitutions, not separate copies.
   `lib/versions.sh` (parsing `java -version`, `node --version`, `terraform
   version` output; comparison), and `doctor_verdict()`.
 - `make smoke-linux`: builds `tests/Dockerfile.ubuntu` (ubuntu:24.04 with a
-  non-root sudo user), runs `bootstrap.sh --yes --skip docker,github-auth,
+  non-root sudo user), runs `bootstrap.sh --yes --skip github-auth,
   clone-repos,project-deps,local-dev-wiring` inside it, then `doctor.sh` with
-  the same skips. Docker-in-Docker and GitHub auth are out of reach in the
+  the same skips. GitHub auth and the private repos are out of reach in the
   container, hence the skips. This is the automated proof of the Linux path.
 - macOS path: run in a fresh Parallels VM, then `doctor.sh`. Manual, because
   macOS VMs cannot be spun up from CI on this setup.

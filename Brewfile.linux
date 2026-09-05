@@ -1,1 +1,1 @@
-# Linux only. Docker comes from Docker's apt repo (steps/50-docker.sh); no casks.
+# Linux only. Empty on purpose: no casks on Linux, and the workspace installs no Docker.

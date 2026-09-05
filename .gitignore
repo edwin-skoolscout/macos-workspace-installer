@@ -1,2 +1,5 @@
 .DS_Store
 tests/tmp/
+/.idea/
+*.iml
+config/repos.txt

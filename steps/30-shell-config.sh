@@ -12,7 +12,7 @@ source "$WI_ROOT/lib/shell-block.sh"
 
 shell_config_target() { rc_file_for_shell "$(login_shell_name)"; }
 shell_config_body() {
-  shell_block_render "$WI_OS" "$(login_shell_name)" "$(brew_prefix_for "$WI_OS" "$WI_ARCH")"
+  shell_block_render "$(login_shell_name)" "$(brew_prefix_for "$WI_OS" "$WI_ARCH")"
 }
 
 step_check() { managed_block_matches "$(shell_config_target)" "$(shell_config_body)"; }

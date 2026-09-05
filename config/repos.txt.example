@@ -1,4 +1,7 @@
-# <ssh url> <branch>   — cloned with --recurse-submodules into WORKSPACE_DIR
+# Repos to clone into WORKSPACE_DIR (see config/versions.env), one per line:
+#   <git url> <branch>
+# Each is cloned with --recurse-submodules. Copy this file to config/repos.txt,
+# which is git-ignored so every machine (or fork) keeps its own list, then edit.
 git@github.com:skoolscout/skoolscout-com.git develop
 git@github.com:skoolscout/skoolscout-com-tenants.git develop
 git@github.com:skoolscout/jefelabs-com.git develop

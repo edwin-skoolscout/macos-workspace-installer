@@ -21,7 +21,7 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --skip)   SKIP="$2"; shift 2 ;;
     --skip=*) SKIP="${1#*=}"; shift ;;
-    -h|--help) echo "Usage: doctor.sh [--skip docker,github-auth,clone-repos,local-dev-wiring]"; exit 0 ;;
+    -h|--help) echo "Usage: doctor.sh [--skip github-auth,clone-repos,local-dev-wiring]"; exit 0 ;;
     *) die "Unknown option: $1" ;;
   esac
 done
@@ -76,11 +76,11 @@ check_version() {
 
 log_header "Tools"
 for t in brew git gh jq direnv tmux nvim herdr mkcert aws awslocal tflocal localstack tfenv psql \
-         node npm pnpm python3 pyenv java gradle terraform cargo rustup docker xmllint zip unzip \
+         node npm pnpm python3 pyenv java gradle terraform cargo rustup xmllint zip unzip \
          task-master dotenv ncu claude; do
   check_cmd "$t"
 done
-if [[ "$WI_OS" == macos ]]; then check_cmd colima; check_cmd stripe; fi
+if [[ "$WI_OS" == macos ]]; then check_cmd stripe; fi
 
 log_header "Versions"
 for v in $JAVA_VERSIONS; do
@@ -95,12 +95,6 @@ if command_exists rustup && rustup target list --installed 2>/dev/null | grep -q
   report PASS "rust target $RUST_TARGET"
 else
   report FAIL "rust target $RUST_TARGET missing"
-fi
-
-if ! skipped docker; then
-  log_header "Docker"
-  if [[ "$WI_OS" == macos ]]; then export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"; fi
-  if docker info >/dev/null 2>&1; then report PASS "docker daemon reachable"; else report FAIL "docker info fails" "colima start (macOS) or re-login for the docker group (Linux)"; fi
 fi
 
 log_header "Homebrew"
@@ -128,12 +122,17 @@ fi
 
 if ! skipped clone-repos; then
   log_header "Repos"
-  while read -r url _; do
-    dir="$WORKSPACE_DIR/$(basename "${url%.git}")"
-    if [[ ! -d "$dir/.git" ]]; then report FAIL "$dir missing"
-    elif git -C "$dir" submodule status --recursive 2>/dev/null | grep -q '^-'; then report WARN "$dir" "submodules not initialised"
-    else report PASS "$dir"; fi
-  done < <(grep -vE '^[[:space:]]*(#|$)' "$WI_ROOT/config/repos.txt")
+  REPOS_FILE="${WI_REPOS_FILE:-$WI_ROOT/config/repos.txt}"
+  if [[ -f "$REPOS_FILE" ]]; then
+    while read -r url _; do
+      dir="$WORKSPACE_DIR/$(basename "${url%.git}")"
+      if [[ ! -d "$dir/.git" ]]; then report FAIL "$dir missing"
+      elif git -C "$dir" submodule status --recursive 2>/dev/null | grep -q '^-'; then report WARN "$dir" "submodules not initialised"
+      else report PASS "$dir"; fi
+    done < <(grep -vE '^[[:space:]]*(#|$)' "$REPOS_FILE")
+  else
+    report WARN "no repos file" "copy config/repos.txt.example to config/repos.txt, then ./install.sh --only clone-repos"
+  fi
 fi
 
 if ! skipped local-dev-wiring; then
