@@ -49,3 +49,11 @@ setup() {
   run brewfile_taps "$WI_ROOT/Brewfile.common"
   [ -z "$output" ]
 }
+
+@test "the homebrew step declares sudo on every OS" {
+  # Its installer needs sudo on macOS as well (it creates /opt/homebrew), so install.sh must
+  # prime the ticket before the step runs `NONINTERACTIVE=1` install.sh, which uses `sudo -n`.
+  run "$WI_ROOT/install.sh" --list
+  [ "$status" -eq 0 ]
+  grep -qE '^homebrew +os=all +sudo=yes ' <<< "$output"
+}

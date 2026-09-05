@@ -3,7 +3,9 @@
 # steps/10-homebrew.sh — Homebrew present (bootstrap.sh normally did this) and updated.
 STEP_DESC="Install Homebrew (macOS or Linuxbrew) and brew update"
 STEP_OS="all"
-STEP_SUDO="linux"
+# The installer needs sudo on both OSes (macOS: it creates /opt/homebrew) and checks with `sudo -n`
+# under NONINTERACTIVE=1, so install.sh must prime the ticket before this step runs.
+STEP_SUDO="yes"
 
 step_check() { load_brew; }
 

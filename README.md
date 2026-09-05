@@ -17,9 +17,10 @@ it from a local checkout (shared folder / USB stick) with `./bootstrap.sh`;
 ./bootstrap.sh
 ```
 
-Have ready: your GitHub login (a browser opens for `gh auth login`), a GitHub PAT with
-`read:packages`, the Font Awesome Pro token, and the LocalStack Pro token. When it finishes,
-open a new terminal and run `./doctor.sh` from the installer directory
+Have ready: your login password (the Homebrew installer and the `/etc/hosts` step need sudo,
+so expect a prompt early on), your GitHub login (a browser opens for `gh auth login`), a
+GitHub PAT with `read:packages`, the Font Awesome Pro token, and the LocalStack Pro token.
+When it finishes, open a new terminal and run `./doctor.sh` from the installer directory
 (`~/Development/Workspaces/ecruz165/macos-workspace-installer`).
 
 The list of repos to clone is yours to define and is not tracked. An interactive run asks

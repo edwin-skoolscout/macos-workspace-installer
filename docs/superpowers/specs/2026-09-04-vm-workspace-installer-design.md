@@ -82,8 +82,11 @@ from a local checkout (shared folder, USB, etc.).
    for it to finish. Ubuntu: `apt-get install` the packages in
    `config/apt-packages.txt` (build-essential, procps, curl, file, git,
    ca-certificates, unzip, zip, libnss3-tools, musl-tools).
-3. Install Homebrew with the official script, `NONINTERACTIVE=1`, and `eval
-   "$(brew shellenv)"` for the current process.
+3. `sudo -v`, then install Homebrew with the official script, `NONINTERACTIVE=1`, and
+   `eval "$(brew shellenv)"` for the current process. The `sudo -v` is needed on macOS
+   too: under `NONINTERACTIVE=1` the Homebrew installer checks access with `sudo -n`,
+   which never prompts, and aborts with "Need sudo access on macOS" when no ticket is
+   cached (learned from the first macOS VM run).
 4. If `install.sh` exists next to `bootstrap.sh`, use that checkout. Otherwise
    `git clone` `$INSTALLER_REPO` (default
    `https://github.com/edwin-skoolscout/macos-workspace-installer.git`, ref
@@ -162,7 +165,7 @@ script (e.g. `sdkman-init.sh`, `nvm.sh`, `brew shellenv`) inside `step_run`.
 
 | # | Step | OS | sudo | What it does | `step_check` |
 |---|---|---|---|---|---|
-| 10 | homebrew | all | macOS: no, Linux: yes | Ensures Homebrew is installed (bootstrap normally did this); runs `brew update`. | `brew --version` works |
+| 10 | homebrew | all | yes | Ensures Homebrew is installed (bootstrap normally did this); runs `brew update`. The installer needs sudo on macOS as well (it creates `/opt/homebrew`) and checks with `sudo -n` under `NONINTERACTIVE=1`, so the step declares sudo and install.sh primes the ticket first. | `brew --version` works |
 | 20 | brew-bundle | all | no | For each Brewfile: tap and `brew trust` every `tap` it declares (Homebrew 6 refuses formulae from untrusted third-party taps), then `brew bundle install --no-upgrade`. Taps: `stripe/stripe-cli`. | `brew bundle check` passes for both files |
 | 30 | shell-config | all | no | Writes the managed block (§10) to the login shell's rc file. | block present and identical |
 | 40 | sdkman | all | no | Installs SDKMAN (curl script, `rcupdate=false`), then `sdk install java` for each of `JAVA_VERSIONS`, `sdk install gradle $GRADLE_VERSION`. Sets the first Java as default. `sdkman_auto_env=true` in `~/.sdkman/etc/config` so `.sdkmanrc` is honoured on `cd`. | all candidates present in `~/.sdkman/candidates` |

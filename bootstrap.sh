@@ -7,7 +7,7 @@
 #
 # Installs OS prerequisites and Homebrew, fetches this repo, then execs install.sh.
 # Deliberately self-contained: it cannot source lib/ because lib/ is not here yet.
-# Env: INSTALLER_REPO, INSTALLER_REF, INSTALLER_DIR; BOOTSTRAP_SKIP_BREW=1 (tests only).
+# Env: INSTALLER_REPO, INSTALLER_REF, INSTALLER_DIR; BOOTSTRAP_SKIP_BREW=1 and BOOTSTRAP_BREW_PREFIXES (tests only).
 set -euo pipefail
 
 INSTALLER_REPO="${INSTALLER_REPO:-https://github.com/edwin-skoolscout/macos-workspace-installer.git}"
@@ -72,14 +72,20 @@ fi
 
 # 4. Homebrew.
 if [[ "${BOOTSTRAP_SKIP_BREW:-0}" != 1 ]]; then
+  read -ra brew_prefixes <<< "${BOOTSTRAP_BREW_PREFIXES:-/opt/homebrew /usr/local /home/linuxbrew/.linuxbrew}"
   brew_found=0
-  for p in /opt/homebrew /usr/local /home/linuxbrew/.linuxbrew; do
+  for p in "${brew_prefixes[@]}"; do
     if [[ -x "$p/bin/brew" ]]; then eval "$("$p/bin/brew" shellenv)"; brew_found=1; break; fi
   done
   if [[ "$brew_found" == 0 ]]; then
-    say "Installing Homebrew"
+    # The Homebrew installer needs sudo on macOS too (it creates and chowns /opt/homebrew) and,
+    # under NONINTERACTIVE=1, checks with `sudo -n`, which never prompts: with no cached ticket it
+    # aborts with "Need sudo access on macOS". Prime the ticket first; sudo prompts on /dev/tty, so
+    # this works even when stdin is the curl pipe.
+    say "Installing Homebrew (its installer needs sudo; enter your password if asked)"
+    sudo -v || fail "sudo is required to install Homebrew; $(id -un) must be an Administrator"
     NONINTERACTIVE=1 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    for p in /opt/homebrew /usr/local /home/linuxbrew/.linuxbrew; do
+    for p in "${brew_prefixes[@]}"; do
       if [[ -x "$p/bin/brew" ]]; then eval "$("$p/bin/brew" shellenv)"; break; fi
     done
   fi
