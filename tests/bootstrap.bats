@@ -59,3 +59,26 @@ run_bootstrap_darwin_without_brew() {
   # aborts on macOS without a cached ticket, so `sudo -v` must come first.
   [[ "$output" == *"sudo -v"*"homebrew installer ran"* ]]
 }
+
+@test "bootstrap.sh discards keystrokes queued on the terminal before handing off" {
+  # macOS script(1) allocates a pty; its Linux namesake has a different CLI, so skip there.
+  [[ "$(uname -s)" == Darwin ]] || skip "needs macOS script(1) to allocate a pty"
+  export INSTALLER_DIR="$BATS_TEST_TMPDIR/installer"
+  mkdir -p "$INSTALLER_DIR/.git"
+  # install.sh stand-in: report whatever the first prompt would have read from the terminal
+  printf '#!/usr/bin/env bash\nread -r -t 1 line; echo "got=[$line]"\n' > "$INSTALLER_DIR/install.sh"
+  chmod +x "$INSTALLER_DIR/install.sh"
+  driver="$BATS_TEST_TMPDIR/driver.sh"
+  cat > "$driver" <<'DRIVER'
+uname() { echo Darwin; }; export -f uname
+xcode-select() { return 0; }; export -f xcode-select
+git() { :; }; export -f git
+export BOOTSTRAP_SKIP_BREW=1
+sleep 0.3                       # let the "y" land in the pty's input queue first
+exec /bin/bash < "$WI_ROOT/bootstrap.sh"   # stdin is the script, as under curl | bash
+DRIVER
+  # Type "y⏎" into the pty, then hold stdin open so script(1) does not send EOF early.
+  run bash -c '(printf "y\n"; sleep 2) | script -q /dev/null /bin/bash "$1"' _ "$driver"
+  [[ "$output" == *"Running install.sh"* ]]
+  [[ "$output" == *"got=[]"* ]]
+}

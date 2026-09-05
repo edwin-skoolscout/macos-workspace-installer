@@ -17,6 +17,15 @@ INSTALLER_DIR="${INSTALLER_DIR:-$HOME/Development/Workspaces/ecruz165/macos-work
 say()  { printf '\033[1;36m→\033[0m %s\n' "$*"; }
 fail() { printf '\033[1;31m✗\033[0m %s\n' "$*" >&2; exit 1; }
 
+# flush_tty_input — discard keystrokes queued on the terminal, if there is one. Anything typed
+# while bootstrap was busy (the Xcode dialog wait, say) would otherwise answer install.sh's first
+# prompt. bash 3.2's `read -t` cannot poll (0 blocks, fractions are rejected), so use tcflush
+# via perl, which both macOS and Ubuntu ship.
+flush_tty_input() {
+  ( exec < /dev/tty ) 2>/dev/null || return 0
+  perl -e 'use POSIX qw(tcflush TCIFLUSH); tcflush(0, TCIFLUSH)' < /dev/tty 2>/dev/null || true
+}
+
 os=""
 case "$(uname -s)" in
   Darwin) os=macos ;;
@@ -92,8 +101,10 @@ if [[ "${BOOTSTRAP_SKIP_BREW:-0}" != 1 ]]; then
 fi
 
 # 5. Hand off. When piped through curl, stdin is the script itself, so reattach the terminal
-#    for the interactive prompts (gh login, secrets) if one exists.
+#    for the interactive prompts (gh login, secrets) if one exists, after dropping any
+#    keystrokes typed while waiting.
 say "Running install.sh $*"
+flush_tty_input
 if [[ ! -t 0 ]] && ( exec < /dev/tty ) 2>/dev/null; then
   exec "$INSTALLER_DIR/install.sh" "$@" < /dev/tty
 else

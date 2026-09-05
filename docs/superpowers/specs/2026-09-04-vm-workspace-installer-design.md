@@ -92,7 +92,9 @@ from a local checkout (shared folder, USB, etc.).
    `https://github.com/edwin-skoolscout/macos-workspace-installer.git`, ref
    `$INSTALLER_REF`, default `main`) into
    `~/Development/Workspaces/ecruz165/macos-workspace-installer`.
-5. `exec ./install.sh "$@"`, forwarding any flags.
+5. Discard any keystrokes queued on the terminal (typed during the Xcode wait, say; they
+   would otherwise answer install.sh's first prompt), then `exec ./install.sh "$@"`,
+   forwarding any flags, with stdin reattached to `/dev/tty` when it was the curl pipe.
 
 HTTPS is used for the clone because no SSH key exists yet at this point. The
 installer repo must be public or reachable with `GIT_ASKPASS`; this is a
