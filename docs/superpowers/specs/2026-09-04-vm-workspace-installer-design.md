@@ -31,6 +31,8 @@ of the user's login shell (`$SHELL`).
 bootstrap.sh                 curl-pipeable entry point (see §4.1)
 install.sh                   orchestrator (see §4.2)
 doctor.sh                    verification (see §4.3)
+clone-repos.sh               repo picker: search, select, clone (see §4.4)
+create-database.sh           local Postgres instances: create/start, stop, status, list (see §4.5)
 Brewfile.common              formulae for both OSes
 Brewfile.macos               macOS-only formulae + casks
 Brewfile.linux               Linux-only formulae (may be empty)
@@ -44,6 +46,7 @@ config/
   secrets.env.example        documented secret names, no values
 lib/
   common.sh                  logging, OS/arch detect, sudo keep-alive, run/dry-run
+  node-tool.sh               shared by the tools/* wrappers: find Node, npm ci once, run the tool
   managed-block.sh           idempotent marked-block writer for rc files
   versions.sh                version parsing/comparison helpers
 steps/
@@ -61,11 +64,18 @@ steps/
   70-clone-repos.sh
   80-local-dev-wiring.sh
   90-project-deps.sh
+package.json                 npm workspaces root (tools/*); tsconfig.json type-checks them
+tools/
+  clone-repos/               TypeScript picker behind clone-repos.sh (see §4.4)
+    package.json             commander, @inquirer/prompts, @inquirer/core
+    src/*.mts                one module per concern, each with a *.test.mts
+  create-database/           Postgres instances behind create-database.sh (see §4.5)
+  lib/                       shared: proc (capture, inherit, exit code), versions-env (read a pin)
 tests/
-  *.bats                     unit tests for lib/
+  *.bats                     unit tests for lib/, steps/ and the entry points
   Dockerfile.ubuntu          Linux smoke test image
   smoke-linux.sh             runs bootstrap inside the image, then doctor
-Makefile                     lint, test, smoke-linux
+Makefile                     lint, test (bats + node --test), check (tsc), smoke-linux
 README.md
 ```
 
@@ -142,6 +152,66 @@ Prints a table of checks and exits 0 only if nothing FAILed. Checks:
 - Every host in `config/dev-hosts.txt` resolves to 127.0.0.1.
 - mkcert root CA is installed (`mkcert -CAROOT` contains `rootCA.pem`).
 
+### 4.4 `clone-repos.sh`
+
+`./clone-repos.sh <owner> [--all] [--filter <text>] [--dry-run]`. A thin bash
+wrapper (finds Node on PATH or through nvm's default, runs `npm ci --omit=dev`
+once) around the TypeScript tool in `tools/clone-repos`, which Node 24 runs
+directly as `.mts` with no build step:
+
+1. `gh repo list <owner>` as JSON. Archived and empty repos are dropped; gh
+   reports an empty repo as `defaultBranchRef.name == ""`.
+2. A custom `@inquirer/core` prompt: type to filter, ↑↓ to move, Tab to toggle,
+   Ctrl-A to toggle everything shown, Enter to confirm. Repos already on disk
+   are marked. `--all` skips the prompt; `--filter` narrows the candidates.
+3. The selection is merged into `config/repos.txt` (`WI_REPOS_FILE` overrides
+   the path; existing entries and their branches win), then each repo is cloned
+   with `--recurse-submodules` on its default branch into
+   `WORKSPACE_DIR/<owner>/<repo>`. `WORKSPACE_DIR` comes from the environment,
+   else from `config/versions.env`.
+
+Modules: `github.mts` (gh), `picker.mts` (prompt and filter), `repos-file.mts`,
+`layout.mts` (URL to directory, mirrored by `repo_dir_for_url` in
+`lib/common.sh`), `config.mts`, `main.mts` (commander CLI and `runCloneRepos`
+with injected side effects). Every module has `node --test` tests; only the
+prompt's rendering is untested. `tools/*` are npm workspaces sharing one
+`node_modules` and one `tsc` and `node --test` run; `tools/lib` holds the process
+helpers and the `versions.env` reader, and `lib/node-tool.sh` the wrapper logic.
+
+### 4.5 `create-database.sh`
+
+`./create-database.sh <create|stop|status|list>`, the TypeScript port of
+`jefelabs-scripts/tools/setup-database.sh` in `tools/create-database`. One
+Postgres data directory per instance under `DATABASES_DIR/<name>`
+(`config/versions.env`, default `~/Development/Databases`, `--base-dir` overrides).
+
+- `create [name]` (default: the current directory's name; asked with inquirer
+  on a terminal): `initdb` if there is no `PG_VERSION` (trust on the socket,
+  scram on localhost, `en_US.UTF-8`, `listen_addresses = 'localhost'`, the first
+  free port from 5433 appended to `postgresql.conf`, or `--port`); `pg_ctl start`
+  unless `pg_ctl status` says it runs, then wait for `pg_isready`; ensure the
+  `postgres` superuser, the application role (`--user`, `--password`, defaults
+  `user`/`pass`) and a database named after the instance; print the connection
+  line. Reruns reuse the data directory and re-pick the port only when the saved
+  one is busy. `--dry-run` prints every command instead.
+- `stop [name]`: `pg_ctl stop -m fast`; a no-op when stopped; a `select` prompt
+  picks the instance when no name is given on a terminal.
+- `status [name]` and `list`: version (`PG_VERSION`), port, running or stopped.
+
+Binaries are resolved per instance: `PG_BIN` if set, else Homebrew's keg-only
+`postgresql@<major>` where the major comes from the instance's `PG_VERSION` (a
+new instance uses 15, the installer's pin). The free-port probe binds
+`127.0.0.1` with Node's `net` module, so `lsof` is not needed.
+
+Modules: `instances.mts` (layout, `PG_VERSION`, port read and choice, the
+`pg_hba.conf` and `postgresql.conf` fragments), `postgres.mts` (binary lookup
+and every command line), `main.mts` (commander CLI and `runCreate`, `runStop`,
+`runStatus`, `runList` with injected exec, exit-code and port-probe
+functions). The tests drive the flows against a fake Postgres that records
+each command and answers `pg_ctl status`, `pg_isready` and the `psql` existence
+queries. Not covered: migrating or upgrading the version 13 clusters the shell
+script created.
+
 ## 5. Step contract
 
 Each `steps/NN-name.sh` is sourced by the orchestrator and defines:
@@ -178,7 +248,7 @@ script (e.g. `sdkman-init.sh`, `nvm.sh`, `brew shellenv`) inside `step_run`.
 | 45 | claude-code | all | no | Installs Claude Code with the native installer if `claude` is missing, then adds every `marketplace` line from `config/claude-plugins.txt`, runs `claude plugin marketplace update` (a fresh install ships a stale official marketplace), then `claude plugin install <name@marketplace>` for each `plugin` line. | `claude --version` works and `claude plugin list` shows every plugin |
 | 51 | postgres | all | no | Ensures `postgresql@15` and `libpq` are installed (via brew-bundle) and `psql` is on PATH. Does NOT start the service: the app runs Postgres in-process in these VMs, so a host instance is opt-in. Prints the `brew services start postgresql@15` hint. | `psql --version` works |
 | 60 | github-auth | all | no | `gh auth login` (interactive; skipped under `--yes` if not already logged in), generates an ed25519 SSH key if none exists, `gh ssh-key add`. Prompts for each secret in `secrets.env.example` (or reads it from the environment), writes `~/.config/skoolscout/secrets.env` (mode 600). Writes `~/.m2/settings.xml` with `<server><id>github</id>` using `${env.GITHUB_TOKEN}` so the token lives in one place. | gh logged in, key uploaded, secrets file complete, settings.xml present |
-| 70 | clone-repos | all | no | For each line `url branch` in `config/repos.txt` (git-ignored; `WI_REPOS_FILE` overrides the path): clone with `--recurse-submodules` into `$WORKSPACE_DIR` if absent, else `git fetch` and `git submodule update --init --recursive`. If the file is missing, an interactive run prompts for URL + branch pairs and writes it; under `--yes` it prints the copy-the-example hint and returns 0. | every repo present with submodules initialised |
+| 70 | clone-repos | all | no | For each line `url branch` in `config/repos.txt` (git-ignored; `WI_REPOS_FILE` overrides the path): clone with `--recurse-submodules` into `$WORKSPACE_DIR/<owner>/<repo>` (`repo_dir_for_url`) if absent, else `git submodule update --init --recursive`. If the file is missing, an interactive run asks for a GitHub owner and hands off to `clone-repos.sh` (§4.4), or takes URL + branch pairs by hand when the owner is left blank; under `--yes` it prints the hint and returns 0. | every repo present with submodules initialised |
 | 80 | local-dev-wiring | all | yes | Appends any missing `127.0.0.1 <host>` lines from `config/dev-hosts.txt` to `/etc/hosts`. Runs `mkcert -install`. | all hosts present, CA installed |
 | 90 | project-deps | all | Linux: yes (Playwright deps) | In `skoolscout-com`: `direnv allow`, `npm i --no-workspaces`, `cd app-ui && npm i`, `cd app-test-e2e-runner && npm i && npx playwright install --with-deps chromium`. In `skoolscout-com-tenants`: `npm i`. In `jefelabs-com`: `pnpm install` (its `packageManager` pins pnpm 11). Sources the secrets file first so private registries authenticate. Skipped with a warning if secrets are missing. | `node_modules` present in each package and Playwright's chromium cached |
 
@@ -275,12 +345,14 @@ NODE_VERSION="24.18.0"                     # .nvmrc
 PYTHON_VERSION="3.10.11"                   # .python-version
 TERRAFORM_VERSION="1.15.8"                 # CI workflows (README's 1.7.5 is stale)
 RUST_TARGET="x86_64-unknown-linux-musl"    # app-functions/schoolScraper
-WORKSPACE_DIR="$HOME/Development/Workspaces/skoolscout"
+WORKSPACE_DIR="$HOME/Development/Workspaces"   # repos land in <owner>/<repo> under it
+DATABASES_DIR="$HOME/Development/Databases"     # create-database instances, one data dir each
 ```
 
 `config/repos.txt.example` (the real list lives in the git-ignored
-`config/repos.txt`, so each machine or fork keeps its own; the clone-repos step
-asks for the repos interactively when the file is absent):
+`config/repos.txt`, so each machine or fork keeps its own; `clone-repos.sh` (§4.4)
+fills it from GitHub, and the clone-repos step offers the same picker when the
+file is absent):
 
 ```
 git@github.com:skoolscout/skoolscout-com.git develop
@@ -399,6 +471,9 @@ so OS/shell differences are substitutions, not separate copies.
   block, leaves surrounding content untouched, no duplicate on re-run),
   `lib/versions.sh` (parsing `java -version`, `node --version`, `terraform
   version` output; comparison), and `doctor_verdict()`.
+- `make test` also runs `npm test`: `node --test` over
+  `tools/*/src/**/*.test.mts`. `make check` runs `tsc --noEmit`. Both need
+  `node_modules`, which the Makefile installs with `npm ci` when missing.
 - `make smoke-linux`: builds `tests/Dockerfile.ubuntu` (ubuntu:24.04 with a
   non-root sudo user), runs `bootstrap.sh --yes --skip github-auth,
   clone-repos,project-deps,local-dev-wiring` inside it, then `doctor.sh` with

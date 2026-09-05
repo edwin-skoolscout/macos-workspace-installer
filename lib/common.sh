@@ -109,6 +109,19 @@ confirm() {
 # in_csv NEEDLE CSV — true if NEEDLE is one of the comma-separated items
 in_csv() { [[ ",$2," == *",$1,"* ]]; }
 
+# repo_dir_for_url URL → WORKSPACE_DIR/<owner>/<repo>, for git@host:owner/repo(.git) and
+# scheme://host/owner/repo(.git). Mirrors repoDirFor in tools/clone-repos; keep the two in step.
+repo_dir_for_url() {
+  local path="${1%/}" repo owner
+  path="${path%.git}"
+  path="${path##*:}"     # git@github.com:owner/repo → owner/repo; https://host/... → //host/...
+  path="${path#//*/}"    # //host/owner/repo → owner/repo
+  repo="${path##*/}"
+  owner="${path%/*}"; owner="${owner##*/}"
+  if [[ -z "$owner" || "$owner" == "$path" ]]; then log_error "repo URL without an owner: $1"; return 1; fi
+  printf '%s/%s/%s\n' "$WORKSPACE_DIR" "$owner" "$repo"
+}
+
 # sudo_keepalive — validate sudo once and refresh it until this process exits
 sudo_keepalive() {
   [[ "$WI_DRY_RUN" == 1 ]] && return 0

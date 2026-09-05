@@ -3,9 +3,9 @@
 setup() { load test_helper; }
 
 @test "versions.env sets every pin under set -u" {
-  run bash -euo pipefail -c "source '$WI_ROOT/config/versions.env'; printf '%s|%s|%s|%s|%s|%s|%s' \"\$JAVA_VERSIONS\" \"\$GRADLE_VERSION\" \"\$NODE_VERSION\" \"\$PYTHON_VERSION\" \"\$TERRAFORM_VERSION\" \"\$RUST_TARGET\" \"\$WORKSPACE_DIR\""
+  run bash -euo pipefail -c "source '$WI_ROOT/config/versions.env'; printf '%s|%s|%s|%s|%s|%s|%s|%s' \"\$JAVA_VERSIONS\" \"\$GRADLE_VERSION\" \"\$NODE_VERSION\" \"\$PYTHON_VERSION\" \"\$TERRAFORM_VERSION\" \"\$RUST_TARGET\" \"\$WORKSPACE_DIR\" \"\$DATABASES_DIR\""
   [ "$status" -eq 0 ]
-  [ "$output" = "25.0.3-amzn 21.0.9-amzn|9.6.1|24.18.0|3.10.11|1.15.8|x86_64-unknown-linux-musl|$HOME/Development/Workspaces/skoolscout" ]
+  [ "$output" = "25.0.3-amzn 21.0.9-amzn|9.6.1|24.18.0|3.10.11|1.15.8|x86_64-unknown-linux-musl|$HOME/Development/Workspaces|$HOME/Development/Databases" ]
 }
 
 @test "repos.txt.example lines are '<git url> <branch>' pairs" {

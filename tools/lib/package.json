@@ -1,0 +1,12 @@
+{
+  "name": "@workspace-installer/lib",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Helpers shared by the TypeScript tools: running processes, reading config/versions.env.",
+  "engines": { "node": ">=24" },
+  "exports": {
+    "./proc": "./src/proc.mts",
+    "./versions-env": "./src/versions-env.mts"
+  }
+}

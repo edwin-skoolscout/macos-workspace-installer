@@ -1,0 +1,16 @@
+{
+  "name": "@workspace-installer/clone-repos",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pick repos of a GitHub owner interactively, record them in config/repos.txt and clone them into WORKSPACE_DIR/<owner>/<repo>.",
+  "engines": {
+    "node": ">=24"
+  },
+  "dependencies": {
+    "@workspace-installer/lib": "*",
+    "@inquirer/core": "^12.0.2",
+    "@inquirer/prompts": "^8.7.1",
+    "commander": "^15.0.0"
+  }
+}

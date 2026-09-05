@@ -3,3 +3,4 @@ tests/tmp/
 /.idea/
 *.iml
 config/repos.txt
+node_modules/

@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034  # STEP_* are read by install.sh after sourcing
-# steps/70-clone-repos.sh — clone config/repos.txt (with submodules) into WORKSPACE_DIR.
-# repos.txt is git-ignored (each machine keeps its own list); config/repos.txt.example
-# shows the format. Without the file, an interactive run asks for the repos and writes
-# it; under --yes the step explains what to do and moves on.
-STEP_DESC="Clone the repos in config/repos.txt (with submodules) into ${WORKSPACE_DIR}"
+# steps/70-clone-repos.sh — clone config/repos.txt (with submodules) into WORKSPACE_DIR/<owner>/<repo>.
+# repos.txt is git-ignored (each machine keeps its own list); config/repos.txt.example shows the
+# format. Without the file, an interactive run offers the GitHub picker (clone-repos.sh) or asks
+# for URLs by hand and writes it; under --yes the step explains what to do and moves on.
+STEP_DESC="Clone the repos in config/repos.txt (with submodules) into ${WORKSPACE_DIR}/<owner>/<repo>"
 STEP_OS="all"
 STEP_SUDO="no"
 
@@ -14,15 +14,28 @@ repos() { grep -vE '^[[:space:]]*(#|$)' "$REPOS_FILE"; }
 
 repos_hint() {
   log_warn "$REPOS_FILE not found; nothing to clone."
-  log_warn "Copy config/repos.txt.example to config/repos.txt, list your repos, then run:"
-  log_warn "  ./install.sh --only clone-repos,project-deps"
+  log_warn "Run ./clone-repos.sh <github-owner> to pick repos, or copy config/repos.txt.example to"
+  log_warn "config/repos.txt, list your repos, then run: ./install.sh --only clone-repos,project-deps"
 }
 
-# repos_prompt — ask for repos one by one and write REPOS_FILE; 1 if none were given.
-# Under --dry-run the entries are shown instead of written.
+# repos_pick OWNER — the TypeScript picker: search, select, record in REPOS_FILE, clone.
+# Under --dry-run it only reports; otherwise 1 unless it left a repos file behind.
+repos_pick() {
+  local cmd="${WI_CLONE_REPOS_CMD:-$WI_ROOT/clone-repos.sh}"   # resolved here so tests can stub it
+  local args=("$1")
+  [[ "$WI_DRY_RUN" == 1 ]] && args+=(--dry-run)
+  WI_REPOS_FILE="$REPOS_FILE" WORKSPACE_DIR="$WORKSPACE_DIR" "$cmd" "${args[@]}"
+  [[ "$WI_DRY_RUN" == 1 || -f "$REPOS_FILE" ]]
+}
+
+# repos_prompt — no repos file yet: offer the GitHub picker, else ask for repos one by one and
+# write REPOS_FILE; 1 if nothing was recorded. Under --dry-run entries are shown, not written.
 repos_prompt() {
-  local url branch entries=""
-  log_info "No $REPOS_FILE yet. Enter the repos to clone; a blank URL finishes."
+  local owner url branch entries=""
+  log_info "No $REPOS_FILE yet."
+  read -r -p "  GitHub owner to browse (blank to type repo URLs instead): " owner || owner=""
+  if [[ -n "$owner" ]]; then repos_pick "$owner"; return; fi
+  log_info "Enter the repos to clone; a blank URL finishes."
   log_info "(Or enter nothing and copy config/repos.txt.example into place later.)"
   while true; do
     read -r -p "  Git URL: " url || break
@@ -33,17 +46,10 @@ repos_prompt() {
   [[ -n "$entries" ]] || return 1
   if wi_dry "write $REPOS_FILE with:"; then printf '%s' "$entries"; return 0; fi
   {
-    printf '# <git url> <branch> — cloned with --recurse-submodules into WORKSPACE_DIR\n'
+    printf '# <git url> <branch> — cloned with --recurse-submodules into WORKSPACE_DIR/<owner>/<repo>\n'
     printf '%s' "$entries"
   } > "$REPOS_FILE"
   log_ok "wrote $REPOS_FILE"
-}
-
-# repo_dir_for_url URL → WORKSPACE_DIR/<name without .git>
-repo_dir_for_url() {
-  local n
-  n="$(basename "$1")"
-  printf '%s/%s\n' "$WORKSPACE_DIR" "${n%.git}"
 }
 
 # a leading "-" in `git submodule status` marks an uninitialised submodule

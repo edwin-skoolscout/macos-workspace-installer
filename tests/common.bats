@@ -80,3 +80,11 @@ setup() {
   grep -qx 'brew tap stripe/stripe-cli' "$calls"
   ! grep -q 'brew trust stripe/stripe-cli' "$calls"
 }
+
+@test "repo_dir_for_url puts a repo under WORKSPACE_DIR/<owner>/<repo> for ssh and https URLs" {
+  export WORKSPACE_DIR=/ws
+  [ "$(repo_dir_for_url git@github.com:skoolscout/skoolscout-com.git)" = /ws/skoolscout/skoolscout-com ]
+  [ "$(repo_dir_for_url https://github.com/acme/app.git)" = /ws/acme/app ]
+  [ "$(repo_dir_for_url https://github.com/acme/app)" = /ws/acme/app ]
+  ! repo_dir_for_url app.git 2>/dev/null
+}

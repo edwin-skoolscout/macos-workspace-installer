@@ -6,9 +6,9 @@ STEP_DESC="npm/pnpm install in cloned repos + Playwright chromium"
 STEP_OS="all"
 STEP_SUDO="linux"
 
-SS="$WORKSPACE_DIR/skoolscout-com"
-TENANTS="$WORKSPACE_DIR/skoolscout-com-tenants"
-JL="$WORKSPACE_DIR/jefelabs-com"
+SS="$WORKSPACE_DIR/skoolscout/skoolscout-com"
+TENANTS="$WORKSPACE_DIR/skoolscout/skoolscout-com-tenants"
+JL="$WORKSPACE_DIR/skoolscout/jefelabs-com"
 
 playwright_cache() {
   if [[ "$WI_OS" == macos ]]; then echo "$HOME/Library/Caches/ms-playwright"; else echo "$HOME/.cache/ms-playwright"; fi

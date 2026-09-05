@@ -1,7 +1,9 @@
-# Repos to clone into WORKSPACE_DIR (see config/versions.env), one per line:
+# Repos to clone, one per line:
 #   <git url> <branch>
-# Each is cloned with --recurse-submodules. Copy this file to config/repos.txt,
-# which is git-ignored so every machine (or fork) keeps its own list, then edit.
+# Each lands in WORKSPACE_DIR/<owner>/<repo> (see config/versions.env), cloned with
+# --recurse-submodules. The real list is config/repos.txt, git-ignored so every machine keeps
+# its own. Easiest way to fill it: ./clone-repos.sh <github-owner> (search, select, clone).
+# Or copy this file to config/repos.txt, edit it, and run ./install.sh --only clone-repos.
 git@github.com:skoolscout/skoolscout-com.git develop
 git@github.com:skoolscout/skoolscout-com-tenants.git develop
 git@github.com:skoolscout/jefelabs-com.git develop

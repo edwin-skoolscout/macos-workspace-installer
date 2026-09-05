@@ -1,0 +1,16 @@
+{
+  "name": "macos-workspace-installer",
+  "private": true,
+  "type": "module",
+  "description": "TypeScript utilities of the workspace installer, one npm workspace per tool under tools/. The shell entry points are bootstrap.sh, install.sh and doctor.sh.",
+  "workspaces": ["tools/*"],
+  "engines": { "node": ">=24" },
+  "scripts": {
+    "check": "tsc --noEmit",
+    "test": "node --test 'tools/*/src/**/*.test.mts'"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "typescript": "^7"
+  }
+}

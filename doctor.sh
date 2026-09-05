@@ -125,13 +125,13 @@ if ! skipped clone-repos; then
   REPOS_FILE="${WI_REPOS_FILE:-$WI_ROOT/config/repos.txt}"
   if [[ -f "$REPOS_FILE" ]]; then
     while read -r url _; do
-      dir="$WORKSPACE_DIR/$(basename "${url%.git}")"
+      dir="$(repo_dir_for_url "$url")"
       if [[ ! -d "$dir/.git" ]]; then report FAIL "$dir missing"
       elif git -C "$dir" submodule status --recursive 2>/dev/null | grep -q '^-'; then report WARN "$dir" "submodules not initialised"
       else report PASS "$dir"; fi
     done < <(grep -vE '^[[:space:]]*(#|$)' "$REPOS_FILE")
   else
-    report WARN "no repos file" "copy config/repos.txt.example to config/repos.txt, then ./install.sh --only clone-repos"
+    report WARN "no repos file" "run ./clone-repos.sh <github-owner>, or copy config/repos.txt.example to config/repos.txt and run ./install.sh --only clone-repos"
   fi
 fi
 

@@ -1,0 +1,13 @@
+{
+  "name": "@workspace-installer/create-database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Local Postgres instances under DATABASES_DIR/<name>: create/start, stop, status, list. Replaces jefelabs-scripts/tools/setup-database.sh.",
+  "engines": { "node": ">=24" },
+  "dependencies": {
+    "@inquirer/prompts": "^8.7.1",
+    "@workspace-installer/lib": "*",
+    "commander": "^15.0.0"
+  }
+}

@@ -23,10 +23,20 @@ GitHub PAT with `read:packages`, the Font Awesome Pro token, and the LocalStack 
 When it finishes, open a new terminal and run `./doctor.sh` from the installer directory
 (`~/Development/Workspaces/ecruz165/macos-workspace-installer`).
 
-The list of repos to clone is yours to define and is not tracked. An interactive run asks
-for them (URL and branch, one at a time) and writes `config/repos.txt`; with `--yes` it says
-what is missing and moves on. You can also copy `config/repos.txt.example` to
-`config/repos.txt`, edit it, and run `./install.sh --only clone-repos,project-deps`.
+Repos are cloned into `~/Development/Workspaces/<owner>/<repo>`. The list is yours to define
+and is not tracked. The easiest way to build it is the picker: it lists a GitHub owner's
+repos, lets you search and select, records the choice in `config/repos.txt` and clones.
+
+```bash
+./clone-repos.sh skoolscout                   # type to search, tab to select, enter to clone
+./clone-repos.sh ecruz165 --filter agentx     # narrow the list first
+./clone-repos.sh skoolscout --all --dry-run   # everything; only show what would happen
+```
+
+An interactive install run with no `config/repos.txt` asks for an owner and opens the same
+picker, or takes URLs by hand if you leave the owner blank. With `--yes` it says what is
+missing and moves on. You can also copy `config/repos.txt.example` to `config/repos.txt`,
+edit it, and run `./install.sh --only clone-repos,project-deps`.
 
 ## What it installs
 
@@ -42,8 +52,8 @@ what is missing and moves on. You can also copy `config/repos.txt.example` to
 | Setup | shell rc block, `gh auth login`, SSH key, secrets file, `~/.m2/settings.xml`, repo clones with submodules, `/etc/hosts` dev entries, mkcert CA, `npm install` + Playwright chromium |
 
 Pins live in `config/versions.env`; hosts in `config/dev-hosts.txt`; repos in
-`config/repos.txt`, which is git-ignored so each machine or fork keeps its own list (start
-from `config/repos.txt.example`).
+`config/repos.txt`, which is git-ignored so each machine or fork keeps its own list (fill it
+with `./clone-repos.sh <owner>` or start from `config/repos.txt.example`).
 
 ## Running pieces
 
@@ -53,11 +63,33 @@ from `config/repos.txt.example`).
 ./install.sh --skip rust               # everything else
 ./install.sh --dry-run --yes           # show what would change
 ./install.sh --only github-auth        # re-enter secrets
+./clone-repos.sh skoolscout            # pick and clone more repos
+./create-database.sh create mydb       # local Postgres instance in ~/Development/Databases/mydb
 ./doctor.sh                            # verify; exit 0 = healthy
 ```
 
 Every step checks itself first, so re-running is safe and fast. Logs go to
 `~/.local/state/workspace-installer/install-<timestamp>.log` with token values redacted.
+
+## Local Postgres instances
+
+`create-database.sh` replaces `jefelabs-scripts/tools/setup-database.sh`: one data directory per
+instance under `~/Development/Databases/<name>` (`DATABASES_DIR` in `config/versions.env`), trust
+auth on the socket, scram on localhost, the first free port from 5433 saved in the instance's
+`postgresql.conf`, a `postgres` superuser, and an application role that owns a database named
+after the instance.
+
+```bash
+./create-database.sh create                 # named after the current directory; asks when run in a terminal
+./create-database.sh create mydb --user app --password secret --port 5440
+./create-database.sh status                 # every instance: version, port, running?
+./create-database.sh stop mydb
+./create-database.sh create mydb --dry-run  # print the plan
+```
+
+Instances made by the old script keep working: each is served by the Homebrew formula matching
+its `PG_VERSION` (`postgresql@13` for the existing ones, `postgresql@15` for new ones), and
+`PG_BIN` overrides the lookup.
 
 ## Secrets
 
@@ -70,11 +102,19 @@ Names are in `config/secrets.env.example`; values are prompted once and stored i
 ```bash
 brew install bats-core shellcheck
 make lint          # shellcheck everything
-make test          # bats unit tests
+make test          # bats for the shell + node --test for tools/*
+make check         # tsc over tools/*
 make list          # step list via macOS's stock bash 3.2
 make dry-run       # full dry run on this machine
 make smoke-linux   # Linux path in an Ubuntu 24.04 container; needs Docker on this machine (20–40 min)
 ```
+
+`tools/*` are npm workspaces holding the TypeScript utilities (`clone-repos`, `create-database`,
+and `lib` for what they share). Node 24
+runs their `.mts` files directly, so there is no build; `make test` runs `npm ci` once. To add
+a utility, create `tools/<name>` with its own `package.json` and a `src/main.mts` that uses
+commander for arguments and inquirer for prompts, then a top-level `<name>.sh` wrapper that
+sources `lib/node-tool.sh` like the existing two.
 
 `lib/verdict.sh` holds `doctor_verdict`, the policy for how loudly the doctor complains
 when an installed version drifts from the pin.
