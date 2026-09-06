@@ -122,6 +122,18 @@ repo_dir_for_url() {
   printf '%s/%s/%s\n' "$WORKSPACE_DIR" "$owner" "$repo"
 }
 
+# cloned_repo_dir NAME [REPOS_FILE] — directory of the repos.txt entry named NAME if it is on disk;
+# 1 otherwise. Used by the databases step and the doctor to tell which databases apply.
+cloned_repo_dir() {
+  local name="$1" file="${2:-${WI_REPOS_FILE:-$WI_ROOT/config/repos.txt}}" url _ dir
+  [[ -f "$file" ]] || return 1
+  while read -r url _; do
+    dir="$(repo_dir_for_url "$url" 2>/dev/null)" || continue
+    if [[ "$(basename "$dir")" == "$name" && -d "$dir/.git" ]]; then printf '%s\n' "$dir"; return 0; fi
+  done < <(grep -vE '^[[:space:]]*(#|$)' "$file")
+  return 1
+}
+
 # sudo_keepalive — validate sudo once and refresh it until this process exits
 sudo_keepalive() {
   [[ "$WI_DRY_RUN" == 1 ]] && return 0

@@ -1,51 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
-import { runCreate, runList, runStatus, runStop, type Deps } from "./main.mts";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fakePostgres } from "./fake-postgres.mts";
+import { runCreate, runList, runStatus, runStop } from "./main.mts";
 
-type Call = string[];
-
-// A fake Postgres: records every command, answers pg_ctl status / pg_isready from `running`,
-// and answers psql SELECTs from `existing` (rows that already exist).
-function harness(opts: { running?: Set<string>; existing?: Set<string>; busy?: number[] } = {}) {
-  const baseDir = mkdtempSync(join(tmpdir(), "create-db-"));
-  const calls: Call[] = [];
-  const logs: string[] = [];
-  const running = opts.running ?? new Set<string>();
-  const existing = opts.existing ?? new Set<string>();
-  const deps: Deps = {
-    baseDir,
-    osUser: "me",
-    binDir: (major) => `/pg${major ?? 15}/bin`,
-    run: async (cmd, args) => {
-      calls.push([basename(cmd), ...args]);
-      const sql = args.at(-1) ?? "";
-      if (basename(cmd) === "psql" && sql.startsWith("SELECT")) return [...existing].some((e) => sql.includes(e)) ? "1\n" : "";
-      if (basename(cmd) === "pg_ctl" && args.includes("start")) running.add(args[1] ?? "");
-      if (basename(cmd) === "pg_ctl" && args.includes("stop")) running.delete(args[1] ?? "");
-      return "";
-    },
-    status: async (cmd, args) => {
-      calls.push([basename(cmd), ...args]);
-      if (basename(cmd) === "pg_ctl") return running.has(args[1] ?? "") ? 0 : 3;
-      if (basename(cmd) === "pg_isready") return 0;
-      return 1;
-    },
-    isPortBusy: (port) => (opts.busy ?? []).includes(port),
-    sleep: async () => {},
-    log: (msg) => logs.push(msg),
-  };
-  const seed = (name: string, major: number, port: number) => {
-    const dir = join(baseDir, name);
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, "PG_VERSION"), `${major}\n`);
-    writeFileSync(join(dir, "postgresql.conf"), `listen_addresses = 'localhost'\nport = ${port}\n`);
-    return dir;
-  };
-  return { deps, calls, logs, seed, baseDir, running };
-}
+const harness = fakePostgres;
 
 const create = (name: string, over: Partial<Parameters<typeof runCreate>[0]> = {}) =>
   ({ name, user: "user", password: "pass", dryRun: false, ...over });
@@ -64,7 +24,7 @@ test("a fresh instance is initialised, configured, started and given its roles a
   assert.ok(sql.includes(`CREATE ROLE "user" WITH LOGIN SUPERUSER PASSWORD 'pass';`));
   assert.ok(sql.includes(`CREATE DATABASE "mydb" OWNER "user";`));
   assert.ok(h.calls.every((c) => !c[0].startsWith("/pg") || c[0].startsWith("/pg15")), "a new cluster uses the default major");
-  assert.deepEqual(result, { name: "mydb", dataDir: dir, port: 5433, user: "user", major: 15, initialized: true, started: true });
+  assert.deepEqual(result, { name: "mydb", dataDir: dir, port: 5433, user: "user", major: 15, initialized: true, started: true, databaseCreated: true });
 });
 
 test("an existing running instance is reused: no initdb, no start, no re-creation, its own binaries", async () => {
@@ -79,6 +39,7 @@ test("an existing running instance is reused: no initdb, no start, no re-creatio
   assert.equal(result.major, 13);
   assert.equal(result.initialized, false);
   assert.equal(result.started, false);
+  assert.equal(result.databaseCreated, false);
 });
 
 test("a stopped instance whose saved port is busy gets a new port appended, then starts", async () => {
@@ -135,4 +96,13 @@ test("an instance whose config never set a port reports Postgres's default 5432"
   assert.equal((await runStatus("legacy", h.deps)).port, 5432);
   h.running.add(dir);
   assert.equal((await runCreate(create("legacy"), h.deps)).port, 5432, "a running instance without a port line is on 5432");
+});
+
+test("a pinned --port that is already in use is refused up front, for new and stopped instances", async () => {
+  const h = harness({ busy: [5432] });
+  await assert.rejects(runCreate(create("fresh", { port: 5432 }), h.deps), /5432.*busy/);
+  assert.ok(!h.calls.some((c) => c[0] === "initdb"), "nothing was initialised");
+  h.seed("old", 15, 5432);
+  await assert.rejects(runCreate(create("old", { port: 5432 }), h.deps), /5432.*busy/);
+  assert.ok(!h.calls.some((c) => c[0] === "pg_ctl" && c.includes("start")), "no start attempted");
 });

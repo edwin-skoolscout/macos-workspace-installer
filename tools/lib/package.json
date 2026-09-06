@@ -4,9 +4,14 @@
   "private": true,
   "type": "module",
   "description": "Helpers shared by the TypeScript tools: running processes, reading config/versions.env.",
-  "engines": { "node": ">=24" },
+  "engines": {
+    "node": ">=24"
+  },
   "exports": {
     "./proc": "./src/proc.mts",
-    "./versions-env": "./src/versions-env.mts"
+    "./versions-env": "./src/versions-env.mts",
+    "./layout": "./src/layout.mts",
+    "./repos-file": "./src/repos-file.mts",
+    "./databases-file": "./src/databases-file.mts"
   }
 }

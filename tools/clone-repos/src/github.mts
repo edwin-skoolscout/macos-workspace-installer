@@ -1,6 +1,6 @@
 // github.mts — list an owner's repos through the gh CLI (already logged in by the github-auth step).
 import { runCapture } from "@workspace-installer/lib/proc";
-import { sshUrlFor } from "./layout.mts";
+import { sshUrlFor } from "@workspace-installer/lib/layout";
 
 export type GitHubRepo = {
   owner: string;

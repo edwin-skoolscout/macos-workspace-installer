@@ -4,6 +4,9 @@
   "private": true,
   "type": "module",
   "description": "Pick repos of a GitHub owner interactively, record them in config/repos.txt and clone them into WORKSPACE_DIR/<owner>/<repo>.",
+  "bin": {
+    "clone-repos": "./src/main.mts"
+  },
   "engines": {
     "node": ">=24"
   },

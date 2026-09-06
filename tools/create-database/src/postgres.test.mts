@@ -35,3 +35,10 @@ test("command lines match setup-database.sh", () => {
 test("connectionHint is a runnable psql line", () => {
   assert.equal(connectionHint(5440, "user", "pass", "mydb"), "PGPASSWORD=pass psql -h localhost -p 5440 -U user -d mydb");
 });
+
+test("psqlFile runs a script file against a database over the socket, stopping on error", () => {
+  assert.deepEqual(cmd.psqlFile("/bin", 5440, "skoolscout", "skoolscout_db", "/r/init/01.sql"), [
+    "/bin/psql",
+    ["-p", "5440", "-U", "skoolscout", "-d", "skoolscout_db", "-v", "ON_ERROR_STOP=1", "-q", "-f", "/r/init/01.sql"],
+  ]);
+});

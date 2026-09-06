@@ -39,6 +39,10 @@ export const cmd = {
     join(bin, "psql"),
     ["-p", String(port), "-U", user, "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-tAc", sql],
   ],
+  psqlFile: (bin: string, port: number, user: string, db: string, file: string): Cmd => [
+    join(bin, "psql"),
+    ["-p", String(port), "-U", user, "-d", db, "-v", "ON_ERROR_STOP=1", "-q", "-f", file],
+  ],
 };
 
 export function connectionHint(port: number, user: string, password: string, db: string): string {

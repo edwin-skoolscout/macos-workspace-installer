@@ -135,6 +135,16 @@ if ! skipped clone-repos; then
   fi
 fi
 
+if ! skipped databases; then
+  log_header "Databases"
+  DATABASES_FILE="${WI_DATABASES_FILE:-$WI_ROOT/config/databases.txt}"
+  while read -r repo db port _; do
+    cloned_repo_dir "$repo" >/dev/null || continue
+    if [[ -f "$DATABASES_DIR/$db/PG_VERSION" ]]; then report PASS "$db for $repo (port $port)"
+    else report FAIL "$db for $repo missing" "run ./create-database.sh sync"; fi
+  done < <(grep -vE '^[[:space:]]*(#|$)' "$DATABASES_FILE" 2>/dev/null)
+fi
+
 if ! skipped local-dev-wiring; then
   log_header "Local dev"
   while read -r h; do

@@ -1,0 +1,6 @@
+# Local Postgres databases the cloned repos need, one per line; the databases step (and
+# clone-repos after cloning) runs `create-database.sh sync`, which creates each instance under
+# DATABASES_DIR/<database> and runs the init scripts once, then keeps it running on reruns.
+#   <repo> <database> <port> <user> <password> [init-sql-dir, relative to the repo]
+# Values mirror the repo's docker-compose Postgres service so the app's own config keeps working.
+skoolscout-com skoolscout_db 5432 skoolscout admin123 app-service/init-scripts

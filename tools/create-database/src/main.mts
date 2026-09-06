@@ -1,20 +1,22 @@
+#!/usr/bin/env node
 // main.mts — create-database CLI: local Postgres instances, one data dir each under DATABASES_DIR.
 // Run through ./create-database.sh at the repo root, which finds Node and installs dependencies.
 import { execFileSync } from "node:child_process";
-import { accessSync, appendFileSync, constants, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createServer } from "node:net";
+import { accessSync, appendFileSync, constants, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import { userInfo } from "node:os";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command, InvalidArgumentError } from "commander";
-import { input, select } from "@inquirer/prompts";
+import { confirm, input, select } from "@inquirer/prompts";
 import { runCapture, runStatus as exitCodeOf } from "@workspace-installer/lib/proc";
 import { readPin } from "@workspace-installer/lib/versions-env";
 import {
   chooseFreePort, DEFAULT_PORT, instanceDir, isInstance, listInstances, readMajor, readPort,
   renderConfAdditions, renderHba, withPort, type Instance,
 } from "./instances.mts";
+import { isPortBusy } from "./ports.mts";
 import { cmd, connectionHint, DEFAULT_MAJOR, resolveBinDir, type Cmd } from "./postgres.mts";
+import { runReset, runSync } from "./sync.mts";
 
 // Everything with a side effect is injected so the flows are testable without a Postgres.
 export type Deps = {
@@ -31,6 +33,7 @@ export type Deps = {
 export type CreateOptions = { name: string; user: string; password: string; port?: number; dryRun: boolean };
 export type CreateResult = {
   name: string; dataDir: string; port: number; user: string; major: number; initialized: boolean; started: boolean;
+  databaseCreated: boolean;
 };
 export type InstanceStatus = { name: string; dataDir: string; major: number | null; port: number; running: boolean };
 
@@ -48,13 +51,20 @@ export async function runCreate(opts: CreateOptions, deps: Deps): Promise<Create
   };
   const check = async ([c, args]: Cmd): Promise<number> => (dry ? 3 : deps.status(c, args)); // 3: not running
   const confPath = join(dataDir, "postgresql.conf");
+  const assertPortFree = async (p: number): Promise<void> => {
+    if (!(await deps.isPortBusy(p))) return;
+    const msg = `port ${p} is busy (another Postgres, or the docker-compose container still up?); stop it or choose another --port`;
+    if (dry) deps.log(`warning: ${msg}`);
+    else throw new Error(msg);
+  };
 
   let port: number;
   let running = false;
   if (initialized) {
+    if (opts.port !== undefined) await assertPortFree(opts.port);
+    port = opts.port ?? (await chooseFreePort(deps.isPortBusy));
     if (!dry) mkdirSync(dataDir, { recursive: true });
     await exec(cmd.initdb(bin, dataDir));
-    port = opts.port ?? (await chooseFreePort(deps.isPortBusy));
     if (dry) {
       deps.log(`[dry-run] write ${join(dataDir, "pg_hba.conf")}; set listen_addresses = 'localhost', port = ${port}`);
     } else {
@@ -69,8 +79,10 @@ export async function runCreate(opts: CreateOptions, deps: Deps): Promise<Create
       port = saved ?? DEFAULT_PORT;
       if (opts.port !== undefined && opts.port !== port) deps.log(`already running on ${port}; --port ${opts.port} ignored`);
     } else {
-      if (opts.port !== undefined) port = opts.port;
-      else if (saved !== null && !(await deps.isPortBusy(saved))) port = saved;
+      if (opts.port !== undefined) {
+        await assertPortFree(opts.port);
+        port = opts.port;
+      } else if (saved !== null && !(await deps.isPortBusy(saved))) port = saved;
       else port = await chooseFreePort(deps.isPortBusy);
       if (port !== saved) {
         if (saved !== null) deps.log(`port ${saved} is busy; using ${port}`);
@@ -95,10 +107,12 @@ export async function runCreate(opts: CreateOptions, deps: Deps): Promise<Create
   if (!(await exists(`SELECT 1 FROM pg_roles WHERE rolname='${sqlLiteral(opts.user)}'`))) {
     await psql(`CREATE ROLE "${opts.user}" WITH LOGIN SUPERUSER PASSWORD '${sqlLiteral(opts.password)}';`);
   }
+  let databaseCreated = false;
   if (!(await exists(`SELECT 1 FROM pg_database WHERE datname='${sqlLiteral(opts.name)}'`))) {
     await psql(`CREATE DATABASE "${opts.name}" OWNER "${opts.user}";`);
+    databaseCreated = true;
   }
-  return { name: opts.name, dataDir, port, user: opts.user, major, initialized, started };
+  return { name: opts.name, dataDir, port, user: opts.user, major, initialized, started, databaseCreated };
 }
 
 async function waitReady(bin: string, port: number, dataDir: string, deps: Deps): Promise<void> {
@@ -156,14 +170,6 @@ function isExecutable(path: string): boolean {
   try { accessSync(path, constants.X_OK); return true; } catch { return false; }
 }
 
-function isPortBusy(port: number): Promise<boolean> {
-  return new Promise((done) => {
-    const server = createServer();
-    server.once("error", () => done(true));
-    server.listen({ port, host: "127.0.0.1" }, () => server.close(() => done(false)));
-  });
-}
-
 function realDeps(baseDir: string): Deps {
   return {
     baseDir,
@@ -196,19 +202,36 @@ function printStatus(rows: InstanceStatus[]): void {
   }
 }
 
+// realpath: npm's node_modules/.bin entries are symlinks to this file.
+function realpathOr(path: string): string {
+  try { return realpathSync(path); } catch { return path; }
+}
+
 const invokedDirectly =
-  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  process.argv[1] !== undefined && realpathOr(resolve(process.argv[1])) === fileURLToPath(import.meta.url);
 
 if (invokedDirectly) {
   const program = new Command()
     .name("create-database")
     .description("Local Postgres instances, one data dir each under DATABASES_DIR/<name>.")
     .option("--base-dir <dir>", "where instances live (default: DATABASES_DIR from config/versions.env)");
-  const deps = (): Deps => {
+  const versionsEnvText = (): string | null => {
     const versionsEnv = join(repoRoot(), "config", "versions.env");
-    const fromFile = existsSync(versionsEnv) ? readFileSync(versionsEnv, "utf8") : null;
-    const baseDir = (program.opts<{ baseDir?: string }>().baseDir) ?? readPin("DATABASES_DIR", process.env, fromFile, "$HOME/Development/Databases");
+    return existsSync(versionsEnv) ? readFileSync(versionsEnv, "utf8") : null;
+  };
+  const deps = (): Deps => {
+    const baseDir = (program.opts<{ baseDir?: string }>().baseDir) ?? readPin("DATABASES_DIR", process.env, versionsEnvText(), "$HOME/Development/Databases");
     return realDeps(baseDir);
+  };
+  const syncDeps = () => {
+    const root = repoRoot();
+    return {
+      ...deps(),
+      create: runCreate,
+      reposFile: process.env.WI_REPOS_FILE ?? join(root, "config", "repos.txt"),
+      databasesFile: process.env.WI_DATABASES_FILE ?? join(root, "config", "databases.txt"),
+      workspaceDir: readPin("WORKSPACE_DIR", process.env, versionsEnvText(), "$HOME/Development/Workspaces"),
+    };
   };
 
   program
@@ -232,6 +255,36 @@ if (invokedDirectly) {
       console.log(`  db/user:  ${r.name} / ${r.user} (password: ${o.password})`);
       console.log(`  connect:  ${connectionHint(r.port, r.user, o.password, r.name)}`);
       console.log(`  stop:     ./create-database.sh stop ${r.name}`);
+    });
+
+  program
+    .command("sync")
+    .description("create/start the databases the cloned repos need (config/databases.txt); init scripts run once")
+    .option("--repos <names>", "only these repos, comma-separated (default: every cloned repo)", (v: string) => v.split(",").map((s) => s.trim()).filter(Boolean))
+    .option("--dry-run", "print what would happen; change nothing", false)
+    .action(async (o: { repos?: string[]; dryRun: boolean }) => {
+      const results = await runSync({ repos: o.repos, dryRun: o.dryRun }, syncDeps());
+      if (results.length === 0) console.log("no cloned repo needs a database");
+      for (const r of results) {
+        const detail = r.created ? ` (created${r.initScripts ? `, ${r.initScripts} init script(s) run` : ""})` : "";
+        console.log(`✓ ${r.database} for ${r.repo} on port ${r.port}${detail}`);
+      }
+    });
+
+  program
+    .command("reset")
+    .description("stop, delete and recreate a declared database, init scripts included (the make db-reset equivalent)")
+    .argument("<database>", "a database from config/databases.txt")
+    .option("--yes", "do not ask for confirmation", false)
+    .option("--dry-run", "print what would happen; change nothing", false)
+    .action(async (database: string, o: { yes: boolean; dryRun: boolean }) => {
+      const r = await runReset(database, { dryRun: o.dryRun }, {
+        ...syncDeps(),
+        confirm: async (message) => o.yes || (process.stdin.isTTY ? confirm({ message, default: false }) : false),
+      });
+      if (r === null || o.dryRun) return;
+      console.log(`✓ ${r.database} recreated on port ${r.port}${r.initScripts ? `, ${r.initScripts} init script(s) run` : ""}`);
+      console.log("  next: boot the app with the ide profile (Flyway migrations + seeds), then make db-reset-seed for the demo tenant");
     });
 
   program

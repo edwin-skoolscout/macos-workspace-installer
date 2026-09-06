@@ -88,3 +88,13 @@ setup() {
   [ "$(repo_dir_for_url https://github.com/acme/app)" = /ws/acme/app ]
   ! repo_dir_for_url app.git 2>/dev/null
 }
+
+@test "cloned_repo_dir finds a repos.txt entry by repo name only when it is on disk" {
+  export WORKSPACE_DIR="$BATS_TEST_TMPDIR/ws"
+  f="$BATS_TEST_TMPDIR/repos.txt"
+  printf '# c\ngit@github.com:skoolscout/skoolscout-com.git develop\ngit@github.com:acme/ghost.git main\n' > "$f"
+  mkdir -p "$WORKSPACE_DIR/skoolscout/skoolscout-com/.git"
+  [ "$(cloned_repo_dir skoolscout-com "$f")" = "$WORKSPACE_DIR/skoolscout/skoolscout-com" ]
+  ! cloned_repo_dir ghost "$f"
+  ! cloned_repo_dir skoolscout-com "$BATS_TEST_TMPDIR/missing.txt"
+}

@@ -1,17 +1,18 @@
+#!/usr/bin/env node
 // main.mts — clone-repos CLI: pick an owner's repos, record them in config/repos.txt, clone them.
 // Run through ./clone-repos.sh at the repo root, which finds Node and installs dependencies.
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { readPin } from "@workspace-installer/lib/versions-env";
 import { cloneable, listRepos, type GitHubRepo } from "./github.mts";
-import { repoDirFor } from "./layout.mts";
+import { parseRepoUrl, repoDirFor } from "@workspace-installer/lib/layout";
 import { filterRepos, pickRepos } from "./picker.mts";
 import { runInherit } from "@workspace-installer/lib/proc";
-import { mergeRepos, readReposFile, writeReposFile, type RepoEntry } from "./repos-file.mts";
+import { mergeRepos, readReposFile, writeReposFile, type RepoEntry } from "@workspace-installer/lib/repos-file";
 
-export type Options = { owner: string; all: boolean; filter?: string; dryRun: boolean };
+export type Options = { owner: string; all: boolean; filter?: string; dryRun: boolean; databases?: boolean };
 
 // Everything with a side effect is injected so the flow is testable without gh, git or a terminal.
 export type Deps = {
@@ -19,6 +20,7 @@ export type Deps = {
   pick: (repos: GitHubRepo[], clonedUrls: ReadonlySet<string>) => Promise<GitHubRepo[]>;
   clone: (entry: RepoEntry, dir: string) => Promise<void>;
   isCloned: (dir: string) => boolean;
+  syncDatabases: (repos: string[], dryRun: boolean) => Promise<void>; // create-database sync --repos
   reposFile: string;
   workspaceDir: string;
   log: (msg: string) => void;
@@ -67,6 +69,9 @@ export async function runCloneRepos(opts: Options, deps: Deps): Promise<Summary>
     await deps.clone(entry, dir);
     cloned += 1;
   }
+  if (opts.databases ?? true) {
+    await deps.syncDatabases(entries.map((e) => parseRepoUrl(e.url).name), opts.dryRun);
+  }
   return { selected: entries.length, cloned, skipped };
 }
 
@@ -85,6 +90,11 @@ function realDeps(): Deps {
     clone: (entry, dir) =>
       runInherit("git", ["clone", "--branch", entry.branch, "--recurse-submodules", entry.url, dir]),
     isCloned: (dir) => existsSync(join(dir, ".git")),
+    syncDatabases: (repos, dryRun) =>
+      runInherit(process.execPath, [
+        fileURLToPath(new URL("../../create-database/src/main.mts", import.meta.url)),
+        "sync", "--repos", repos.join(","), ...(dryRun ? ["--dry-run"] : []),
+      ]),
     reposFile: process.env.WI_REPOS_FILE ?? join(root, "config", "repos.txt"),
     workspaceDir: readPin(
       "WORKSPACE_DIR",
@@ -96,8 +106,13 @@ function realDeps(): Deps {
   };
 }
 
+// realpath: npm's node_modules/.bin entries are symlinks to this file.
+function realpathOr(path: string): string {
+  try { return realpathSync(path); } catch { return path; }
+}
+
 const invokedDirectly =
-  process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+  process.argv[1] !== undefined && realpathOr(resolve(process.argv[1])) === fileURLToPath(import.meta.url);
 
 if (invokedDirectly) {
   const program = new Command()
@@ -109,8 +124,12 @@ if (invokedDirectly) {
     .option("--all", "take every cloneable repo without asking", false)
     .option("--filter <text>", "only offer repos whose name contains every space-separated term")
     .option("--dry-run", "show what would be recorded and cloned; change nothing", false)
-    .action(async (owner: string, o: { all: boolean; filter?: string; dryRun: boolean }) => {
-      const summary = await runCloneRepos({ owner, all: o.all, filter: o.filter, dryRun: o.dryRun }, realDeps());
+    .option("--no-databases", "do not create the selected repos' databases afterwards (config/databases.txt)")
+    .action(async (owner: string, o: { all: boolean; filter?: string; dryRun: boolean; databases: boolean }) => {
+      if (!o.all && !process.stdin.isTTY) {
+        throw new Error("no terminal for the picker; use --all (with --filter to narrow) or run from a terminal");
+      }
+      const summary = await runCloneRepos({ owner, all: o.all, filter: o.filter, dryRun: o.dryRun, databases: o.databases }, realDeps());
       console.log(`${summary.selected} selected, ${summary.cloned} cloned, ${summary.skipped} already present`);
     });
   try {

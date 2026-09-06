@@ -4,7 +4,7 @@ import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { runCloneRepos, type Deps } from "./main.mts";
-import { readReposFile } from "./repos-file.mts";
+import { readReposFile } from "@workspace-installer/lib/repos-file";
 import type { GitHubRepo } from "./github.mts";
 
 const repo = (name: string, extra: Partial<GitHubRepo> = {}): GitHubRepo => ({
@@ -24,6 +24,7 @@ function harness(repos: GitHubRepo[], clonedDirs: string[] = []) {
     isCloned: (target) => clonedDirs.includes(target),
     reposFile: join(dir, "config", "repos.txt"),
     workspaceDir: join(dir, "ws"),
+    syncDatabases: async () => {},
     log: (msg) => logs.push(msg),
   };
   return { deps, clones, logs, get picked() { return picked; }, dir };
@@ -80,4 +81,20 @@ test("an empty selection leaves the repos file untouched", async () => {
   const result = await runCloneRepos({ owner: "acme", all: false, dryRun: false }, h.deps);
   assert.deepEqual(result, { selected: 0, cloned: 0, skipped: 0 });
   assert.deepEqual(readReposFile(h.deps.reposFile), []);
+});
+
+test("after cloning, the databases of the selected repos are synced", async () => {
+  const h = harness([repo("app"), repo("docs")]);
+  const synced: string[][] = [];
+  h.deps.syncDatabases = async (names) => { synced.push(names); };
+  await runCloneRepos({ owner: "acme", all: true, dryRun: false, databases: true }, h.deps);
+  assert.deepEqual(synced, [["app", "docs"]]);
+});
+
+test("--no-databases skips the sync", async () => {
+  const h = harness([repo("app")]);
+  let called = false;
+  h.deps.syncDatabases = async () => { called = true; };
+  await runCloneRepos({ owner: "acme", all: true, dryRun: false, databases: false }, h.deps);
+  assert.equal(called, false);
 });

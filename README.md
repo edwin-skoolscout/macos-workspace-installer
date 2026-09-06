@@ -49,7 +49,7 @@ edit it, and run `./install.sh --only clone-repos,project-deps`.
 | npm globals | dotenv-cli, npm-check-updates |
 | Claude Code | native install + plugins from `config/claude-plugins.txt` (superpowers, mattpocock-skills) |
 | GUI (macOS) | Ghostty, VS Code, Google Chrome, Postman, Figma |
-| Setup | shell rc block, `gh auth login`, SSH key, secrets file, `~/.m2/settings.xml`, repo clones with submodules, `/etc/hosts` dev entries, mkcert CA, `npm install` + Playwright chromium |
+| Setup | shell rc block, `gh auth login`, SSH key, secrets file, `~/.m2/settings.xml`, repo clones with submodules, local Postgres instances from `config/databases.txt`, `/etc/hosts` dev entries, mkcert CA, `npm install` + Playwright chromium |
 
 Pins live in `config/versions.env`; hosts in `config/dev-hosts.txt`; repos in
 `config/repos.txt`, which is git-ignored so each machine or fork keeps its own list (fill it
@@ -91,6 +91,18 @@ Instances made by the old script keep working: each is served by the Homebrew fo
 its `PG_VERSION` (`postgresql@13` for the existing ones, `postgresql@15` for new ones), and
 `PG_BIN` overrides the lookup.
 
+The databases the repos depend on are declared in `config/databases.txt`, one line per repo
+(`<repo> <database> <port> <user> <password> [init-sql-dir]`), with the values from the repo's
+own docker-compose Postgres service so the app's config keeps working without Docker. Edit it
+to suit. `./create-database.sh sync` creates every instance whose repo is cloned, runs the
+repo's init scripts once, and keeps it running on reruns; `clone-repos.sh` runs it for the
+repos you just picked (`--no-databases` to skip), and the `databases` install step runs it on
+a full install. `./create-database.sh reset skoolscout_db` is the `make db-reset` equivalent:
+stop, delete the data directory, recreate it and rerun the init scripts; boot the app with
+the `ide` profile afterwards for Flyway, then `make db-reset-seed` if you need the demo tenant.
+A pinned port that something else holds, such as the compose container still running on
+5432, is refused up front.
+
 ## Secrets
 
 Names are in `config/secrets.env.example`; values are prompted once and stored in
@@ -113,8 +125,11 @@ make smoke-linux   # Linux path in an Ubuntu 24.04 container; needs Docker on th
 and `lib` for what they share). Node 24
 runs their `.mts` files directly, so there is no build; `make test` runs `npm ci` once. To add
 a utility, create `tools/<name>` with its own `package.json` and a `src/main.mts` that uses
-commander for arguments and inquirer for prompts, then a top-level `<name>.sh` wrapper that
-sources `lib/node-tool.sh` like the existing two.
+commander for arguments and inquirer for prompts, a `bin` entry, and a top-level `<name>.sh`
+wrapper that sources `lib/node-tool.sh` like the existing two. The `bin` entries mean
+`npm exec clone-repos -- skoolscout` and `npm exec create-database -- list` also work from the
+repo once dependencies are installed; the wrappers stay the entry points on a fresh VM because
+they find Node and install those dependencies first.
 
 `lib/verdict.sh` holds `doctor_verdict`, the policy for how loudly the doctor complains
 when an installed version drifts from the pin.

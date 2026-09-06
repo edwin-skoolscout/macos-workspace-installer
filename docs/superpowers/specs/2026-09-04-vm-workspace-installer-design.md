@@ -39,6 +39,7 @@ Brewfile.linux               Linux-only formulae (may be empty)
 config/
   versions.env               tool version pins (see §8)
   repos.txt.example          repo list template; copied to the git-ignored repos.txt
+  databases.txt              which local Postgres database each repo needs (see §4.5)
   npm-globals.txt            global npm packages
   claude-plugins.txt         Claude Code marketplaces + plugins
   apt-packages.txt           Ubuntu apt prerequisites
@@ -62,6 +63,7 @@ steps/
   51-postgres.sh
   60-github-auth.sh
   70-clone-repos.sh
+  75-databases.sh
   80-local-dev-wiring.sh
   90-project-deps.sh
 package.json                 npm workspaces root (tools/*); tsconfig.json type-checks them
@@ -147,6 +149,8 @@ Prints a table of checks and exits 0 only if nothing FAILed. Checks:
 - `gh auth status` succeeds; `ssh -T git@github.com` authenticates.
 - Each repo in `config/repos.txt` exists in the workspace with submodules
   initialised (no repos file at all is a warning).
+- Each database in `config/databases.txt` whose repo is cloned has an initialised
+  instance under `DATABASES_DIR` (a missing one fails, with the sync command).
 - Secrets file exists and each name in `secrets.env.example` is non-empty
   (values are never printed).
 - Every host in `config/dev-hosts.txt` resolves to 127.0.0.1.
@@ -177,6 +181,12 @@ with injected side effects). Every module has `node --test` tests; only the
 prompt's rendering is untested. `tools/*` are npm workspaces sharing one
 `node_modules` and one `tsc` and `node --test` run; `tools/lib` holds the process
 helpers and the `versions.env` reader, and `lib/node-tool.sh` the wrapper logic.
+After cloning, `clone-repos` runs `create-database sync --repos <selected>` so a
+picked repo gets its database (§4.5); `--no-databases` skips that.
+Each tool also declares a `bin` (`clone-repos`, `create-database`) with a
+`#!/usr/bin/env node` shebang, so `npm exec <tool>` works from the repo; the
+`invokedDirectly` guard resolves `argv[1]` through `realpath` because npm's
+`.bin` entries are symlinks.
 
 ### 4.5 `create-database.sh`
 
@@ -200,17 +210,37 @@ Postgres data directory per instance under `DATABASES_DIR/<name>`
 
 Binaries are resolved per instance: `PG_BIN` if set, else Homebrew's keg-only
 `postgresql@<major>` where the major comes from the instance's `PG_VERSION` (a
-new instance uses 15, the installer's pin). The free-port probe binds
-`127.0.0.1` with Node's `net` module, so `lsof` is not needed.
+new instance uses 15, the installer's pin). The port probe tries to connect on
+both `127.0.0.1` and `::1` with Node's `net` module (no `lsof`): Docker Desktop
+publishes container ports on an IPv6 wildcard that a bind on `127.0.0.1` does
+not notice, which is how the first probe missed the compose Postgres on 5432.
 
 Modules: `instances.mts` (layout, `PG_VERSION`, port read and choice, the
 `pg_hba.conf` and `postgresql.conf` fragments), `postgres.mts` (binary lookup
-and every command line), `main.mts` (commander CLI and `runCreate`, `runStop`,
+and every command line), `ports.mts` (the probe), `sync.mts` (`sync` and
+`reset`), `main.mts` (commander CLI and `runCreate`, `runStop`,
 `runStatus`, `runList` with injected exec, exit-code and port-probe
 functions). The tests drive the flows against a fake Postgres that records
 each command and answers `pg_ctl status`, `pg_isready` and the `psql` existence
 queries. Not covered: migrating or upgrading the version 13 clusters the shell
 script created.
+
+`sync [--repos a,b] [--dry-run]` is the "post-install": for every line of
+`config/databases.txt` (`<repo> <database> <port> <user> <password>
+[init-sql-dir]`, tracked, with the values of the repo's docker-compose Postgres
+service so the app's own config works without Docker) whose repo is cloned under
+`WORKSPACE_DIR/<owner>/<repo>` (or is named in `--repos`), run the create flow
+with those values, then, only when the database was just created, run the
+repo's `<init-sql-dir>/*.sql` in name order through `psql` as the app user, as
+the container's `docker-entrypoint-initdb.d` did on first start. Reruns keep the
+instance running. Step 75 and `clone-repos` both call it.
+
+`reset <database> [--yes] [--dry-run]` is the `make db-reset` equivalent for a
+declared database: confirm, `pg_ctl stop` if running, delete the data directory,
+then the sync flow for that repo, so the init scripts run again. Flyway and the
+seeds are the app's job on its next boot with the `ide` profile. A pinned port
+that is already in use (the compose container still up, say) is refused before
+anything is created or started.
 
 ## 5. Step contract
 
@@ -249,6 +279,7 @@ script (e.g. `sdkman-init.sh`, `nvm.sh`, `brew shellenv`) inside `step_run`.
 | 51 | postgres | all | no | Ensures `postgresql@15` and `libpq` are installed (via brew-bundle) and `psql` is on PATH. Does NOT start the service: the app runs Postgres in-process in these VMs, so a host instance is opt-in. Prints the `brew services start postgresql@15` hint. | `psql --version` works |
 | 60 | github-auth | all | no | `gh auth login` (interactive; skipped under `--yes` if not already logged in), generates an ed25519 SSH key if none exists, `gh ssh-key add`. Prompts for each secret in `secrets.env.example` (or reads it from the environment), writes `~/.config/skoolscout/secrets.env` (mode 600). Writes `~/.m2/settings.xml` with `<server><id>github</id>` using `${env.GITHUB_TOKEN}` so the token lives in one place. | gh logged in, key uploaded, secrets file complete, settings.xml present |
 | 70 | clone-repos | all | no | For each line `url branch` in `config/repos.txt` (git-ignored; `WI_REPOS_FILE` overrides the path): clone with `--recurse-submodules` into `$WORKSPACE_DIR/<owner>/<repo>` (`repo_dir_for_url`) if absent, else `git submodule update --init --recursive`. If the file is missing, an interactive run asks for a GitHub owner and hands off to `clone-repos.sh` (§4.4), or takes URL + branch pairs by hand when the owner is left blank; under `--yes` it prints the hint and returns 0. | every repo present with submodules initialised |
+| 75 | databases | all | no | For each `config/databases.txt` line whose repo is cloned (`cloned_repo_dir`): `create-database.sh sync` (§4.5) creates the instance under `$DATABASES_DIR/<database>`, runs the init scripts once and starts it; nothing applicable is a no-op. | every applicable instance has a `PG_VERSION` |
 | 80 | local-dev-wiring | all | yes | Appends any missing `127.0.0.1 <host>` lines from `config/dev-hosts.txt` to `/etc/hosts`. Runs `mkcert -install`. | all hosts present, CA installed |
 | 90 | project-deps | all | Linux: yes (Playwright deps) | In `skoolscout-com`: `direnv allow`, `npm i --no-workspaces`, `cd app-ui && npm i`, `cd app-test-e2e-runner && npm i && npx playwright install --with-deps chromium`. In `skoolscout-com-tenants`: `npm i`. In `jefelabs-com`: `pnpm install` (its `packageManager` pins pnpm 11). Sources the secrets file first so private registries authenticate. Skipped with a warning if secrets are missing. | `node_modules` present in each package and Playwright's chromium cached |
 
@@ -366,6 +397,16 @@ git@github.com:skoolscout/jefelabs-docs.git develop
 GitHub Packages. `jefelabs-scripts` and `jefelabs-docs` are also the `.scripts`
 and `.docs` submodules of the app repos; cloning them standalone gives a place
 to edit and push them directly.
+
+`config/databases.txt` (tracked; edit to suit):
+
+```
+skoolscout-com skoolscout_db 5432 skoolscout admin123 app-service/init-scripts
+```
+
+The values are those of `app-service/docker-compose.ide.yml`, whose Postgres
+container the VMs cannot run; the dev password is already committed there and
+in `application-ide.yml`.
 
 `config/dev-hosts.txt` (copied from the `DEV_HOSTS` list in the project
 Makefile):
