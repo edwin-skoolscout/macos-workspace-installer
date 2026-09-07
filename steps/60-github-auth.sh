@@ -56,9 +56,16 @@ collect_secrets() {
 }
 
 # ensure_gh_login — an exported GITHUB_TOKEN already counts as logged in; otherwise the browser
-# flow, over HTTPS so the resulting OAuth token also serves git.
+# flow, over HTTPS so the resulting OAuth token also serves git. A token GitHub rejects has to
+# be replaced, not worked around: gh refuses the browser login while the variable is set, and
+# the value in the secrets file would be reused on the next run.
 ensure_gh_login() {
   gh_logged_in && return 0
+  if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+    log_error "GitHub rejects GITHUB_TOKEN from $WI_SECRETS_FILE (bad credentials)."
+    log_error "Classic PAT values show only once, at creation: regenerate it on https://github.com/settings/tokens, Configure SSO → Authorize the org, then: GITHUB_TOKEN=<new token> ./install.sh --only github-auth"
+    return 1
+  fi
   if [[ "$WI_YES" == 1 ]]; then
     log_warn "gh is not logged in and --yes was given; set GITHUB_TOKEN in $WI_SECRETS_FILE or run: gh auth login --git-protocol https"
     return 0
@@ -112,7 +119,7 @@ step_run() {
   load_brew || { [[ "$WI_DRY_RUN" == 1 ]] && return 0; die "Homebrew missing"; }
   collect_secrets
   load_secrets 2>/dev/null || true   # GITHUB_TOKEN into this process: gh's login from here on
-  ensure_gh_login
+  ensure_gh_login || return 1
   ensure_git_https
   check_org_access || return 1
   ensure_maven_settings

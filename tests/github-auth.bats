@@ -26,7 +26,7 @@ setup() {
 gh() {
   echo "gh $*" >> "$GH_LOG"
   case "$1 $2" in
-    "auth status") return 0 ;;
+    "auth status") [[ -z "${GH_BAD_TOKEN:-}" ]] ;;
     "auth login") return 0 ;;
     "auth setup-git") git config --global --add credential.https://github.com.helper '!/usr/local/bin/gh auth git-credential' ;;
     "api user") echo edwin ;;
@@ -86,4 +86,13 @@ gh() {
   [[ "$output" == *"insteadOf"* ]]
   [ ! -f "$HOME/.gitconfig" ]
   [ ! -f "$HOME/.m2/settings.xml" ]
+}
+
+@test "a GITHUB_TOKEN GitHub rejects fails the step and says how to replace it" {
+  export GH_BAD_TOKEN=1
+  run step_run
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"rejects GITHUB_TOKEN"* ]]
+  [[ "$output" == *"GITHUB_TOKEN=<new token> ./install.sh --only github-auth"* ]]
+  ! grep -q 'gh auth login' "$GH_LOG"
 }
