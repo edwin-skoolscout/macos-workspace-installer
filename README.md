@@ -18,8 +18,10 @@ it from a local checkout (shared folder / USB stick) with `./bootstrap.sh`;
 ```
 
 Have ready: your login password (the Homebrew installer and the `/etc/hosts` step need sudo,
-so expect a prompt early on), your GitHub login (a browser opens for `gh auth login`), a
-GitHub PAT with `read:packages`, the Font Awesome Pro token, and the LocalStack Pro token.
+so expect a prompt early on), a GitHub classic PAT with `repo` + `read:packages` that you have
+authorised for your organisation (token page → Configure SSO), the Font Awesome Pro token, and
+the LocalStack Pro token. The PAT is the only GitHub credential: gh logs in with it, git clones
+over HTTPS with it, and npm and Maven read packages with it. No SSH key, no browser login.
 When it finishes, open a new terminal and run `./doctor.sh` from the installer directory
 (`~/Development/Workspaces/ecruz165/macos-workspace-installer`).
 
@@ -38,6 +40,13 @@ picker, or takes URLs by hand if you leave the owner blank. With `--yes` it says
 missing and moves on. You can also copy `config/repos.txt.example` to `config/repos.txt`,
 edit it, and run `./install.sh --only clone-repos,project-deps`.
 
+The repos are private. `repos.txt` keeps the `git@github.com:` URLs GitHub shows, and the
+github-auth step rewrites them (and submodule URLs) to HTTPS at clone time, so the one PAT covers
+everything. If a clone is refused, both paths stop and print the fix: a missing or unauthorised
+token means `GITHUB_TOKEN` in `~/.config/skoolscout/secrets.env` and `./install.sh --only
+github-auth`; a SAML SSO refusal means the token exists but is not authorised for the org yet
+(token page → Configure SSO → Authorize). Then rerun the command.
+
 ## What it installs
 
 | Area | Tools |
@@ -49,7 +58,7 @@ edit it, and run `./install.sh --only clone-repos,project-deps`.
 | npm globals | dotenv-cli, npm-check-updates |
 | Claude Code | native install + plugins from `config/claude-plugins.txt` (superpowers, mattpocock-skills) |
 | GUI (macOS) | Ghostty, VS Code, Google Chrome, Postman, Figma |
-| Setup | shell rc block, `gh auth login`, SSH key, secrets file, `~/.m2/settings.xml`, repo clones with submodules, local Postgres instances from `config/databases.txt`, `/etc/hosts` dev entries, mkcert CA, `npm install` + Playwright chromium |
+| Setup | shell rc block, secrets file, gh login + git over HTTPS with the token, `~/.m2/settings.xml`, repo clones with submodules, local Postgres instances from `config/databases.txt`, `/etc/hosts` dev entries, mkcert CA, `npm install` + Playwright chromium |
 
 Pins live in `config/versions.env`; hosts in `config/dev-hosts.txt`; repos in
 `config/repos.txt`, which is git-ignored so each machine or fork keeps its own list (fill it

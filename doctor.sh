@@ -104,11 +104,24 @@ fi
 
 if ! skipped github-auth; then
   log_header "GitHub"
-  if command_exists gh && gh auth status -h github.com >/dev/null 2>&1; then report PASS "gh logged in"; else report FAIL "gh not logged in" "gh auth login --git-protocol ssh"; fi
-  if ssh -T -o BatchMode=yes -o ConnectTimeout=10 -o StrictHostKeyChecking=accept-new git@github.com 2>&1 | grep -q "successfully authenticated"; then
-    report PASS "ssh to github.com"
+  load_secrets 2>/dev/null || true
+  if command_exists gh && gh auth status -h github.com >/dev/null 2>&1; then report PASS "gh logged in"; else report FAIL "gh not logged in" "GITHUB_TOKEN in $WI_SECRETS_FILE, then ./install.sh --only github-auth"; fi
+  if git config --global --get-all credential.https://github.com.helper 2>/dev/null | grep -q 'gh auth git-credential' \
+     && [[ "$(git config --global --get url.https://github.com/.insteadof 2>/dev/null)" == "git@github.com:" ]]; then
+    report PASS "git clones github.com over HTTPS with gh's token"
   else
-    report FAIL "ssh to github.com" "gh ssh-key add ~/.ssh/id_ed25519.pub"
+    report FAIL "git not wired to gh over HTTPS" "./install.sh --only github-auth"
+  fi
+  first_url="$(grep -vE '^[[:space:]]*(#|$)' "${WI_REPOS_FILE:-$WI_ROOT/config/repos.txt}" 2>/dev/null | head -1 | cut -d' ' -f1)"
+  if [[ -n "$first_url" ]] && slug="$(repo_dir_for_url "$first_url" 2>/dev/null)"; then
+    slug="${slug#"$WORKSPACE_DIR"/}"
+    if out="$(gh api "repos/$slug" -q .full_name 2>&1)"; then
+      report PASS "token reads $slug"
+    elif [[ "$out" == *SAML* ]]; then
+      report FAIL "token not SSO-authorised for $slug" "github.com/settings/tokens → Configure SSO → Authorize the org"
+    else
+      report WARN "cannot read $slug with the token" "$out"
+    fi
   fi
   log_header "Secrets"
   if [[ -f "$WI_SECRETS_FILE" ]]; then

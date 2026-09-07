@@ -31,3 +31,21 @@ export function runStatus(cmd: string, args: string[]): Promise<number> {
     child.on("exit", (code) => resolve(code ?? 1));
   });
 }
+
+// runInheritCapture — like runInherit, but stderr is also collected so a failure can be
+// explained (git clone writes its refusals there). Progress still reaches the terminal.
+export function runInheritCapture(cmd: string, args: string[]): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(cmd, args, { stdio: ["inherit", "inherit", "pipe"] });
+    let stderr = "";
+    child.stderr?.on("data", (chunk: Buffer) => {
+      process.stderr.write(chunk);
+      stderr += chunk.toString();
+    });
+    child.on("error", reject);
+    child.on("exit", (code, signal) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${cmd} ${args.join(" ")} exited with ${signal ?? code}\n${stderr}`));
+    });
+  });
+}

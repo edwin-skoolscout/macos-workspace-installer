@@ -9,7 +9,8 @@ import { readPin } from "@workspace-installer/lib/versions-env";
 import { cloneable, listRepos, type GitHubRepo } from "./github.mts";
 import { parseRepoUrl, repoDirFor } from "@workspace-installer/lib/layout";
 import { filterRepos, pickRepos } from "./picker.mts";
-import { runInherit } from "@workspace-installer/lib/proc";
+import { runInherit, runInheritCapture } from "@workspace-installer/lib/proc";
+import { explainCloneFailure } from "./git-errors.mts";
 import { mergeRepos, readReposFile, writeReposFile, type RepoEntry } from "@workspace-installer/lib/repos-file";
 
 export type Options = { owner: string; all: boolean; filter?: string; dryRun: boolean; databases?: boolean };
@@ -87,8 +88,13 @@ function realDeps(): Deps {
   return {
     listRepos: (owner) => listRepos(owner),
     pick: pickRepos,
-    clone: (entry, dir) =>
-      runInherit("git", ["clone", "--branch", entry.branch, "--recurse-submodules", entry.url, dir]),
+    clone: async (entry, dir) => {
+      try {
+        await runInheritCapture("git", ["clone", "--branch", entry.branch, "--recurse-submodules", entry.url, dir]);
+      } catch (err) {
+        throw new Error(explainCloneFailure(entry.url, err instanceof Error ? err.message : String(err)));
+      }
+    },
     isCloned: (dir) => existsSync(join(dir, ".git")),
     syncDatabases: (repos, dryRun) =>
       runInherit(process.execPath, [

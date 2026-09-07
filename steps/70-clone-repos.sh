@@ -52,6 +52,31 @@ repos_prompt() {
   log_ok "wrote $REPOS_FILE"
 }
 
+SSO_HINT="Open https://github.com/settings/tokens, pick the token, 'Configure SSO' → Authorize the organisation, then rerun: ./install.sh --only clone-repos"
+CREDS_HINT="Private repos need a GitHub token: put a PAT (repo scope, SSO-authorised for the org) in $WI_SECRETS_FILE as GITHUB_TOKEN, then run ./install.sh --only github-auth,clone-repos (or gh auth login --git-protocol https first, then the same)"
+
+# clone_repo URL BRANCH DIR — git clone; when GitHub refuses, say what to do instead of leaving
+# only git's message: a SAML SSO block needs the token authorised for the org in the browser,
+# anything else credential-shaped needs the token (github-auth step).
+clone_repo() {
+  if [[ "$WI_DRY_RUN" == 1 ]]; then wi_dry "git clone --branch $2 --recurse-submodules $1 $3"; return 0; fi
+  local err rc
+  err="$(mktemp)"
+  git clone --branch "$2" --recurse-submodules "$1" "$3" 2>&1 | tee "$err"
+  rc="${PIPESTATUS[0]}"
+  if [[ "$rc" != 0 ]]; then
+    if grep -qi 'SAML SSO' "$err"; then
+      log_error "cannot clone $1: the token is not authorised for the organisation's SAML SSO."
+      log_error "$SSO_HINT"
+    elif grep -qiE 'permission denied \(publickey\)|repository not found|could not read username|authentication failed|invalid username or token|host key verification failed|could not read from remote' "$err"; then
+      log_error "cannot clone $1: GitHub refused the credentials on this machine."
+      log_error "$CREDS_HINT"
+    fi
+  fi
+  rm -f "$err"
+  return "$rc"
+}
+
 # a leading "-" in `git submodule status` marks an uninitialised submodule
 submodules_ready() { ! git -C "$1" submodule status --recursive 2>/dev/null | grep -q '^-'; }
 
@@ -67,6 +92,7 @@ step_check() {
 
 step_run() {
   local url branch dir
+  load_secrets 2>/dev/null || true   # GITHUB_TOKEN for gh's credential helper (steps run in subshells)
   if [[ ! -f "$REPOS_FILE" ]]; then
     if [[ "$WI_YES" == 1 ]] || ! repos_prompt; then repos_hint; return 0; fi
     [[ "$WI_DRY_RUN" != 1 ]] || return 0
@@ -75,7 +101,7 @@ step_run() {
   while read -r url branch; do
     dir="$(repo_dir_for_url "$url")"
     if [[ ! -d "$dir/.git" ]]; then
-      wi_run git clone --branch "$branch" --recurse-submodules "$url" "$dir"
+      clone_repo "$url" "$branch" "$dir"
     else
       log_info "$dir exists; updating submodules"
       wi_run git -C "$dir" submodule update --init --recursive

@@ -97,3 +97,34 @@ setup() {
   [[ "$output" == *"picker: acme --dry-run"* ]]
   [ ! -f "$WI_REPOS_FILE" ]
 }
+
+@test "a clone refused for lack of credentials fails the step with the PAT / github-auth hint" {
+  export WI_DRY_RUN=0
+  git() { printf 'ERROR: Repository not found.\nfatal: Could not read from remote repository.\n' >&2; return 128; }
+  run step_run
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Repository not found"* ]]
+  [[ "$output" == *"github-auth"* ]]
+  [[ "$output" == *"PAT"* ]]
+}
+
+@test "step_run exports the secrets file before cloning, so gh's credential helper sees GITHUB_TOKEN" {
+  export WI_DRY_RUN=0
+  export WI_SECRETS_FILE="$BATS_TEST_TMPDIR/secrets.env"
+  printf 'GITHUB_TOKEN=ghp_from_file\n' > "$WI_SECRETS_FILE"
+  unset GITHUB_TOKEN
+  git() { echo "git sees GITHUB_TOKEN=${GITHUB_TOKEN:-unset}"; mkdir -p "${*: -1}/.git"; }
+  run step_run
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"git sees GITHUB_TOKEN=ghp_from_file"* ]]
+}
+
+@test "a clone blocked by SAML SSO fails the step with the Configure SSO hint, not the github-auth one" {
+  export WI_DRY_RUN=0
+  git() { printf "ERROR: The 'acme' organization has enabled or enforced SAML SSO.\nfatal: Could not read from remote repository.\n" >&2; return 128; }
+  run step_run
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Configure SSO"* ]]
+  [[ "$output" == *"github.com/settings/tokens"* ]]
+  [[ "$output" != *"--only github-auth"* ]]
+}

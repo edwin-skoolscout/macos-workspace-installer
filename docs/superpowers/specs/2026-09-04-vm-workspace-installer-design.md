@@ -108,7 +108,7 @@ from a local checkout (shared folder, USB, etc.).
    would otherwise answer install.sh's first prompt), then `exec ./install.sh "$@"`,
    forwarding any flags, with stdin reattached to `/dev/tty` when it was the curl pipe.
 
-HTTPS is used for the clone because no SSH key exists yet at this point. The
+HTTPS is used for the clone because no credentials exist yet at this point. The
 installer repo must be public or reachable with `GIT_ASKPASS`; this is a
 documented prerequisite, not something bootstrap solves.
 
@@ -146,7 +146,9 @@ Prints a table of checks and exits 0 only if nothing FAILed. Checks:
   implemented in `doctor_verdict()` — see §15.
 - `psql --version` works.
 - `brew doctor` has no errors (warnings are reported, not failed).
-- `gh auth status` succeeds; `ssh -T git@github.com` authenticates.
+- `gh auth status` succeeds; gh is git's credential helper for github.com and
+  `git@github.com:` URLs are rewritten to HTTPS; the token reads the first repo in
+  `config/repos.txt` (a 403 mentioning SAML means it is not SSO-authorised yet).
 - Each repo in `config/repos.txt` exists in the workspace with submodules
   initialised (no repos file at all is a warning).
 - Each database in `config/databases.txt` whose repo is cloned has an initialised
@@ -182,7 +184,14 @@ prompt's rendering is untested. `tools/*` are npm workspaces sharing one
 `node_modules` and one `tsc` and `node --test` run; `tools/lib` holds the process
 helpers and the `versions.env` reader, and `lib/node-tool.sh` the wrapper logic.
 After cloning, `clone-repos` runs `create-database sync --repos <selected>` so a
-picked repo gets its database (§4.5); `--no-databases` skips that.
+picked repo gets its database (§4.5); `--no-databases` skips that. A clone that
+GitHub refuses for lack of credentials ("Permission denied (publickey)",
+"Repository not found", "could not read Username", "Authentication failed") is
+reported as such, with the PAT in the secrets file and the github-auth step as
+the fix; a refusal because the org "has enabled or enforced SAML SSO" gets its
+own message pointing at the token's Configure SSO page, since rerunning the
+auth step cannot grant that. Step 70's `clone_repo` does the same for the shell
+path (`git-errors.mts`, tested against GitHub's real wording).
 Each tool also declares a `bin` (`clone-repos`, `create-database`) with a
 `#!/usr/bin/env node` shebang, so `npm exec <tool>` works from the repo; the
 `invokedDirectly` guard resolves `argv[1]` through `realpath` because npm's
@@ -277,7 +286,7 @@ script (e.g. `sdkman-init.sh`, `nvm.sh`, `brew shellenv`) inside `step_run`.
 | 44 | rust | all | no | `rustup-init -y --no-modify-path`, `rustup target add $RUST_TARGET`. macOS additionally taps and trusts `filosottile/musl-cross` and installs `musl-cross` for the Lambda scraper. | target listed in `rustup target list --installed` |
 | 45 | claude-code | all | no | Installs Claude Code with the native installer if `claude` is missing, then adds every `marketplace` line from `config/claude-plugins.txt`, runs `claude plugin marketplace update` (a fresh install ships a stale official marketplace), then `claude plugin install <name@marketplace>` for each `plugin` line. | `claude --version` works and `claude plugin list` shows every plugin |
 | 51 | postgres | all | no | Ensures `postgresql@15` and `libpq` are installed (via brew-bundle) and `psql` is on PATH. Does NOT start the service: the app runs Postgres in-process in these VMs, so a host instance is opt-in. Prints the `brew services start postgresql@15` hint. | `psql --version` works |
-| 60 | github-auth | all | no | `gh auth login` (interactive; skipped under `--yes` if not already logged in), generates an ed25519 SSH key if none exists, `gh ssh-key add`. Prompts for each secret in `secrets.env.example` (or reads it from the environment), writes `~/.config/skoolscout/secrets.env` (mode 600). Writes `~/.m2/settings.xml` with `<server><id>github</id>` using `${env.GITHUB_TOKEN}` so the token lives in one place. | gh logged in, key uploaded, secrets file complete, settings.xml present |
+| 60 | github-auth | all | no | Prompts for each secret in `secrets.env.example` (or reads it from the environment), writes `~/.config/skoolscout/secrets.env` (mode 600), and exports it. An exported `GITHUB_TOKEN` is gh's login; without one, `gh auth login --git-protocol https --web` (skipped under `--yes`). `gh auth setup-git` makes gh git's credential helper and `url.https://github.com/.insteadOf git@github.com:` rewrites the SSH URLs in repos.txt and submodules to HTTPS, so the one classic PAT (`repo` + `read:packages`, SSO-authorised for the org) clones everything; no SSH key is generated or uploaded (under SAML SSO each key would need its own browser-side grant per machine). Reads the first repo in repos.txt with the token and stops with the Configure SSO link on a SAML 403. Writes `~/.m2/settings.xml` with `<server><id>github</id>` using `${env.GITHUB_TOKEN}` so the token lives in one place. | gh logged in, git wired to gh over HTTPS, secrets file complete, settings.xml present |
 | 70 | clone-repos | all | no | For each line `url branch` in `config/repos.txt` (git-ignored; `WI_REPOS_FILE` overrides the path): clone with `--recurse-submodules` into `$WORKSPACE_DIR/<owner>/<repo>` (`repo_dir_for_url`) if absent, else `git submodule update --init --recursive`. If the file is missing, an interactive run asks for a GitHub owner and hands off to `clone-repos.sh` (§4.4), or takes URL + branch pairs by hand when the owner is left blank; under `--yes` it prints the hint and returns 0. | every repo present with submodules initialised |
 | 75 | databases | all | no | For each `config/databases.txt` line whose repo is cloned (`cloned_repo_dir`): `create-database.sh sync` (§4.5) creates the instance under `$DATABASES_DIR/<database>`, runs the init scripts once and starts it; nothing applicable is a no-op. | every applicable instance has a `PG_VERSION` |
 | 80 | local-dev-wiring | all | yes | Appends any missing `127.0.0.1 <host>` lines from `config/dev-hosts.txt` to `/etc/hosts`. Runs `mkcert -install`. | all hosts present, CA installed |
@@ -422,7 +431,7 @@ demo-school.skoolscout.com.local
 `config/secrets.env.example`:
 
 ```
-GITHUB_TOKEN=            # PAT with read:packages — npm + Maven GitHub Packages
+GITHUB_TOKEN=            # classic PAT: repo + read:packages, SSO-authorised — clones, npm + Maven GitHub Packages
 FONTAWESOME_PACKAGE_TOKEN=   # Font Awesome Pro npm registry
 LOCALSTACK_AUTH_TOKEN=   # LocalStack Pro
 ```
