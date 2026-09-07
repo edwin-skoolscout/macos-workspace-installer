@@ -34,3 +34,11 @@ setup() {
   run "$WI_ROOT/doctor.sh" --skip clone-repos,local-dev-wiring
   [[ "$output" == *"secrets file missing"* ]]
 }
+
+@test "a missing secrets template is a failure, not a pass on zero checked names" {
+  printf 'GITHUB_TOKEN=x\n' > "$WI_SECRETS_FILE"
+  export WI_SECRETS_EXAMPLE="$BATS_TEST_TMPDIR/no-such-example"
+  run "$WI_ROOT/doctor.sh" --skip clone-repos,local-dev-wiring
+  [[ "$output" == *"secrets template missing"* ]]
+  [[ "$output" != *"all secrets set"* ]]
+}

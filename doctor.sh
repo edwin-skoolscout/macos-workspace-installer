@@ -124,8 +124,11 @@ if ! skipped github-auth; then
     fi
   fi
   log_header "Secrets"
-  if [[ -f "$WI_SECRETS_FILE" ]]; then
-    missing="$(secrets_missing "$WI_SECRETS_FILE" "$WI_ROOT/config/secrets.env.example" | tr '\n' ' ')"
+  SECRETS_EXAMPLE="${WI_SECRETS_EXAMPLE:-$WI_ROOT/config/secrets.env.example}"
+  if [[ ! -f "$SECRETS_EXAMPLE" ]]; then
+    report FAIL "secrets template missing" "$SECRETS_EXAMPLE — restore the checkout (git checkout -- config)"
+  elif [[ -f "$WI_SECRETS_FILE" ]]; then
+    missing="$(secrets_missing "$WI_SECRETS_FILE" "$SECRETS_EXAMPLE" | tr '\n' ' ')"
     if [[ -z "$missing" ]]; then report PASS "all secrets set"; else report FAIL "missing secrets" "$missing"; fi
   else
     report FAIL "secrets file missing" "$WI_SECRETS_FILE"
