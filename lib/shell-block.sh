@@ -4,9 +4,12 @@
 [[ -n "${_WI_SHELL_BLOCK_LOADED:-}" ]] && return 0
 _WI_SHELL_BLOCK_LOADED=1
 
-# shell_block_render SHELL BREW_PREFIX → block body on stdout
+# shell_block_render SHELL BREW_PREFIX WORKSPACE_DIR → block body on stdout.
+# `agent` launches Claude Code with permission checks bypassed. The last line aliases every
+# WORKSPACE_DIR/<owner>/<repo> to a cd into it, rebuilt each time a shell starts, so repos cloned
+# by the step, the picker or by hand all get one and none go stale.
 shell_block_render() {
-  local shell="$1" brew_prefix="$2"
+  local shell="$1" brew_prefix="$2" workspace="$3"
   cat <<EOT
 eval "\$($brew_prefix/bin/brew shellenv)"
 export SDKMAN_DIR="\$HOME/.sdkman"
@@ -18,5 +21,7 @@ command -v pyenv >/dev/null 2>&1 && eval "\$(pyenv init -)"
 command -v direnv >/dev/null 2>&1 && eval "\$(direnv hook $shell)"
 export PATH="\$HOME/.cargo/bin:\$HOME/.local/bin:$brew_prefix/opt/rustup/bin:$brew_prefix/opt/libpq/bin:\$PATH"
 [ -f "\$HOME/.config/skoolscout/secrets.env" ] && set -a && source "\$HOME/.config/skoolscout/secrets.env" && set +a
+alias agent='claude --dangerously-skip-permissions'
+for _wi_repo in "$workspace"/*/*/; do [ -d "\$_wi_repo" ] && alias "\$(basename "\$_wi_repo")"="cd '\$_wi_repo'"; done; unset _wi_repo
 EOT
 }

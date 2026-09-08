@@ -28,6 +28,10 @@ When it finishes, open a new terminal and run `./doctor.sh` from the installer d
 Repos are cloned into `~/Development/Workspaces/<owner>/<repo>`. The list is yours to define
 and is not tracked. The easiest way to build it is the picker: it lists a GitHub owner's
 repos, lets you search and select, records the choice in `config/repos.txt` and clones.
+Every cloned repo gets a shell alias named after it, so `skoolscout-com` from any directory is
+`cd ~/Development/Workspaces/skoolscout/skoolscout-com`. The aliases are rebuilt from what is
+on disk each time a shell starts; open a new terminal after cloning to pick up new ones.
+`agent` is also defined: it runs `claude --dangerously-skip-permissions`.
 
 ```bash
 ./clone-repos.sh skoolscout                   # type to search, tab to select, enter to clone

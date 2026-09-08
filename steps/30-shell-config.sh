@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # shellcheck disable=SC2034  # STEP_* are read by install.sh after sourcing
-# steps/30-shell-config.sh — managed block in the login shell's rc file.
-STEP_DESC="Write the managed block to the login shell rc file"
+# steps/30-shell-config.sh — managed block in the login shell's rc file (tool init + a cd alias per repo).
+STEP_DESC="Write the managed block (tool init, one cd alias per cloned repo) to the login shell rc file"
 STEP_OS="all"
 STEP_SUDO="no"
 
@@ -12,7 +12,7 @@ source "$WI_ROOT/lib/shell-block.sh"
 
 shell_config_target() { rc_file_for_shell "$(login_shell_name)"; }
 shell_config_body() {
-  shell_block_render "$(login_shell_name)" "$(brew_prefix_for "$WI_OS" "$WI_ARCH")"
+  shell_block_render "$(login_shell_name)" "$(brew_prefix_for "$WI_OS" "$WI_ARCH")" "$WORKSPACE_DIR"
 }
 
 step_check() { managed_block_matches "$(shell_config_target)" "$(shell_config_body)"; }
